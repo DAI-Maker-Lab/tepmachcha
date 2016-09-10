@@ -1,6 +1,6 @@
 #Tepmachcha
 
-![tepmacha](https://github.com/DAI-Maker-Lab/tepmachcha/blob/master/photos/tepmachcha.JPG)
+![tepmacha](https://raw.githubusercontent.com/DAI-Maker-Lab/tepmachcha/master/photos/tepmachcha.JPG)
 
 ##Flood Early Warning Using Sonar and IVR
 Tepmachcha is an open source sonar stream gauge designed to give early warning of flood conditions to residents in vulnerable areas. When a flood condition is detected, Tepmachcha triggers a call with a voice recording via the RapidPro interactive voice response (IVR) system. It also records water levels at regular intervals for later analysis of flooding patterns or to inform more complex hydrological analysis. 
