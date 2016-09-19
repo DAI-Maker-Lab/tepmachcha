@@ -1,0 +1,4 @@
+(fp_lib_table
+  (lib (name Tepmachcha)(type KiCad)(uri "$(KIPRJMOD)")(options "")(descr ""))
+  (lib (name graphics)(type KiCad)(uri "$(KIPRJMOD)/graphics")(options "")(descr ""))
+)
