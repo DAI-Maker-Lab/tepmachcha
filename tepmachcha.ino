@@ -1,4 +1,4 @@
-#define VERSION "1.0"       //  Version number
+#define VERSION "1.01"      //  Version number
 
 //  Customize these items for each installation
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -57,6 +57,7 @@ boolean sendRed[ZONES] = {false, false};
 boolean sentData = false;
 boolean smsPower = false;       //  Manual XBee power flag
 boolean noSMS = false;          //  Flag to turn off SMS checking -- for future use
+boolean timeReset = false;      //  Flag indicating whether midnight time reset has already occurred
 byte beeShutoffHour = 0;        //  Hour to turn off manual power to XBee
 byte beeShutoffMinute = 0;      //  Minute to turn off manual power to XBee
 char method = 0;                //  Method of clock set, for debugging
@@ -143,7 +144,14 @@ void setup()
         now = RTC.now();    //  Get the current time from the RTC
         
         //  We'll keep the XBee on for an hour after startup to assist installation
-        beeShutoffHour = (now.hour() + 1);
+        if (now.hour() == 23)
+        {
+                beeShutoffHour = 0;
+        }
+        else
+        {
+                beeShutoffHour = (now.hour() + 1);
+        }
         beeShutoffMinute = now.minute();
 
         Serial.print (F("XBee powered on until at least "));
@@ -250,14 +258,6 @@ void loop()
                 }
         }
 
-        /*   The RTC drifts more than the datasheet says, so we'll reset the time every day at
-         *   midnight. 
-         */
-        if (now.hour() == 0 && now.minute() == 0)
-        {
-                clockSet();
-        }
-
         Serial.flush();                         //  Flush any output before sleep
 
         sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
@@ -313,6 +313,20 @@ void upload (int streamHeight)
         if (noSMS == false)
         {
                 checkSMS();
+        }
+
+        /*   The RTC drifts more than the datasheet says, so we'll reset the time every day at
+         *   midnight. 
+         */
+        if (now.hour() == 0 && timeReset == false)
+        {
+                clockSet();
+                timeReset = true;
+        }
+
+        if (now.hour() != 0)
+        {
+                timeReset = false;
         }
         
         fonaOff();
@@ -396,7 +410,7 @@ boolean fonaOn()
 
                 wait (3000);    //  Give the network a moment
 
-                fona.setGPRSNetworkSettings (F("cellcard"));    //  Set APN to your local carrier
+                //fona.setGPRSNetworkSettings (F("cellcard"));    //  Set APN to your local carrier
 
                 if (rssi > 5)
                 {
