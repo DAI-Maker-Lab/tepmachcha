@@ -479,6 +479,7 @@ void clockSet()
                 netMinute = netHour;
                 netHour = netDay;
                 netDay = netMonth;
+                netMonth = netYear;
                 netYear = secondInt;
 
                 Serial.println (F("Recombobulating..."));
