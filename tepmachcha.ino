@@ -1,4 +1,4 @@
-#define VERSION "1.01"      //  Version number
+#define VERSION "1.03"      //  Version number
 
 //  Customize these items for each installation
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -245,15 +245,22 @@ void loop()
                         }
                         else
                         {
-                                if (smsPower == true)
+                                if (smsPower == true && now.hour() == 23 && beeShutoffHour == 0)
                                 {
-                                          Serial.println (F("Turning XBee off..."));
-                                          Serial.flush();
-                                          wait (500);
+                                        digitalWrite (BEEPIN, LOW);
                                 }
-
-                                digitalWrite (BEEPIN, HIGH);
-                                smsPower = false;
+                                else
+                                {
+                                        if (smsPower == true)
+                                        {
+                                                  Serial.println (F("Turning XBee off..."));
+                                                  Serial.flush();
+                                                  wait (500);
+                                        }
+        
+                                        digitalWrite (BEEPIN, HIGH);
+                                        smsPower = false;
+                                }
                         }
                 }
         }
