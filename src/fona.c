@@ -1,3 +1,5 @@
+
+
 #define VERSION "1.03"      //  Version number
 
 //  Customize these items for each installation
@@ -16,12 +18,17 @@
 #define CLEARYELLOW "CLEAR_YELLOW_PASSSWORD" //  Password to clear yellow alerts
 #define CLEARRED "CLEAR_RED_PASSWORD"        //  Password to clear red alerts
 
+#define DOTIMES(x) for(uint8_t i=x; i;i--)
+
 /*   Tepmachcha is written to accommodate different alert levels for separate zones --
  *   a low-lying zone in the region might need a lower yellow alert level than another
  *   zone. Note that using more than three zones will cause an overflow in the SMS
  *   reply function as currently written.
  */
 #define ZONES 2             //  Number of separate zones to be covered
+
+#define XON  17
+#define XOFF 19
 
 /*   If you do not define yellow, red, yellowFlow, redFlow and alert for all of your zones, 
  *   weird things will happen. Don't forget that zones will be numbered starting from zero.
@@ -38,21 +45,34 @@ boolean sendRed[ZONES] = {false, false};
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 #include <Adafruit_FONA.h>
+
 #include <DS1337.h>           //  For the Stalker's real-time clock (RTC)
 #include <Sleep_n0m1.h>       //  Sleep library
 #include <SoftwareSerial.h>   //  For serial communication with FONA
+#include <Fat16.h>             //  FAT16 library for SD card
+//#include <I2C.h>             //  I2C library for communication with RTC
 #include <Wire.h>             //  I2C library for communication with RTC
 
+//#include "SdFat.h"
+
 #define RTCINT 0    //  RTC interrupt number
+
 #define RTCPIN 2    //  Onboard Stalker RTC pin
+
 #define FONA_RST 4  //  FONA RST pin
+
 #define BEEPIN 5    //  XBee power pin
 #define FONA_RX 6   //  UART pin into FONA
 #define PING 7      //  Sonar ping pin
 #define RANGE 8     //  Sonar range pin -- pull low to turn off sonar
 #define FONA_TX 9   //  UART pin from FONA
-#define FONA_KEY 11 //  FONA Key pin
-#define FONA_PS 12  //  FONA power status pin
+
+//#define FONA_KEY 11 //  FONA Key pin
+//#define FONA_PS 12  //  FONA power status pin
+
+#define FONA_KEY A2  //  FONA Key pin
+#define FONA_PS  A3  //  FONA power status pin
+#define FONA_RTS A4  //  FONA RTS pin
 
 boolean sentData = false;
 boolean smsPower = false;       //  Manual XBee power flag
@@ -71,17 +91,17 @@ DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 Sleep sleep;        //  Create the sleep object
 
 
-
-static void rtcIRQ()
+static void rtcIRQ (void)
 {
         RTC.clearINTStatus();   //  Wake from sleep and clear the RTC interrupt
 }
 
 
 
-void setup()
+void setup (void)
 {
         Wire.begin(); //  Begin the I2C interface
+        //I2c.begin(); //  Begin the I2C interface
         RTC.begin();  //  Begin the RTC        
         Serial.begin (57600);
         Serial.print (F("Tepmachcha version "));
@@ -91,10 +111,54 @@ void setup()
         Serial.print (F(" "));
         Serial.println (__TIME__);
 
-        analogReference (INTERNAL); 
+        //analogReference (INTERNAL); // 1.1 on atmega328
+        analogReference(DEFAULT);  // 3.3?
+        //analogReference(EXTERNAL); // 3.3?
+
+        //{ uint8_t i=5; while(i--) { analogRead(A7); delay(100); }}
+
+        //for(uint8_t i=5 ;i;i--) { analogRead(A7); delay(100); }
+
+        //DOTIMES(5) { analogRead(A7); delay(100); }
+
 
         Serial.print (F("Startup voltage "));
-        Serial.println (analogRead (A7) * 6.4);   //  Convert ADC reading to voltage
+
+        // Get battery reading on A7 (0-1023) in mV
+        // VBAT (AREF 3.3v) is divided by a 10k/2k divider to A7, so (3.3v * ((10+2)/2) / 1.024)
+        // AREF integer fraction
+        // 1.1  825/128
+        // 3.3  4950/256 (~155/8) 
+
+        // Use integer math 4950/256 (~155/8) to save including >1.2k of FP/multiplication logic
+        uint32_t nn = 0;
+        uint16_t n = analogRead(A7);
+
+
+        DOTIMES(155) nn += n;
+
+        //{ uint8_t i=155; while(i--) nn += n; }
+
+        //for(uint8_t i=155; i;i--) nn += n;
+
+        /*
+        for(uint8_t i=155; i; i--) {
+          nn += n;
+        }
+        */
+
+        /*
+        { uint8_t i=155;
+          while(i--)
+            nn += n; }
+        */
+
+
+        Serial.println (nn/8);
+
+        //uint16_t n = analogRead(A7);
+        //Serial.println (n*16 + n*4);
+
         
         pinMode (BEEPIN, OUTPUT);
         pinMode (RANGE, OUTPUT);
@@ -108,6 +172,7 @@ void setup()
          *   measured voltage is less than 3.5V, we will put the unit to sleep and wake once per 
          *   hour to check the charge status.
          */
+
 
         while (analogRead (A7) < 547)   
         {
@@ -130,7 +195,7 @@ void setup()
         fonaOn();
         clockSet();
         
-        //  Delete any accumulated SMS messages to avoid interference from old commands
+        // Delete any accumulated SMS messages to avoid interference from old commands
         fona.sendCheckReply (F("AT+CMGF=1"), F("OK"));            //  Enter text mode
         fona.sendCheckReply (F("AT+CMGDA=\"DEL ALL\""), F("OK")); //  Delete all SMS messages
         
@@ -163,9 +228,12 @@ void setup()
 }
 
 
-
-void loop()
+void loop (void)
 {
+        getFirmware();
+
+
+
         now = RTC.now();      //  Get the current time from the RTC
 
         Serial.print (now.hour());
@@ -273,8 +341,7 @@ void loop()
 }
 
 
-
-void upload (int streamHeight)
+void upload(int streamHeight)
 {
         fonaOn();
         sendReading (streamHeight);
@@ -357,8 +424,11 @@ void wait (unsigned long period)
 
 boolean fonaOn()
 {
+
         if (digitalRead (FONA_PS) == LOW)             //  If the FONA is off...
         {
+                digitalWrite(FONA_KEY, HIGH);  //  KEY should be high to start
+
                 Serial.print (F("Powering FONA on..."));
                 while (digitalRead (FONA_PS) == LOW) 
                 {
@@ -382,6 +452,7 @@ boolean fonaOn()
         {
                 Serial.print (F("FONA online. "));
                 
+
                 unsigned long gsmTimeout = millis() + 30000;
                 boolean gsmTimedOut = false;
 
@@ -397,7 +468,8 @@ boolean fonaOn()
                                 break;
                         }
                         
-                        wait (250);
+                        //wait (250);
+                        wait (500);
                 }
 
                 if(gsmTimedOut == true)
@@ -417,7 +489,7 @@ boolean fonaOn()
 
                 wait (3000);    //  Give the network a moment
 
-                //fona.setGPRSNetworkSettings (F("cellcard"));    //  Set APN to your local carrier
+                fona.setGPRSNetworkSettings (F("cellcard"));    //  Set APN to your local carrier
 
                 if (rssi > 5)
                 {
@@ -426,7 +498,7 @@ boolean fonaOn()
                               //  Sometimes enableGPRS() returns false even though it succeeded
                               if (fona.GPRSstate() != 1)
                               {
-                                      for (byte GPRSattempts = 0; GPRSattempts < 5; GPRSattempts++)
+                                      for (byte GPRSattempts = 0; GPRSattempts < 10; GPRSattempts++)
                                       {
                                             Serial.println (F("Trying again..."));
                                             wait (2000);
@@ -457,7 +529,7 @@ boolean fonaOn()
 
 
 
-void clockSet()
+void clockSet (void)
 {
         wait (1000);    //  Give time for any trailing data to come in from FONA
 
@@ -559,7 +631,7 @@ void clockSet()
 
 
 
-void flushFona()
+void flushFona (void)
 {
         // Read all available serial input from FONA to flush any pending data.
         while(fona.available())
@@ -571,7 +643,7 @@ void flushFona()
 
 
 
-void fonaOff()
+void fonaOff (void)
 {
         wait (5000);        //  Shorter delays yield unpredictable results
 
@@ -599,8 +671,7 @@ void fonaOff()
 }
 
 
-
-int takeReading()
+int takeReading (void)
 {
         //  We will take the mode of seven samples to try to filter spurious readings
         int sample[] = {0, 0, 0, 0, 0, 0, 0};   //  Initial sample values
@@ -761,6 +832,202 @@ boolean sendReading (int streamHeight)
         return success;
 }
 
+const uint8_t CHIP_SELECT = SS;  // SD chip select pin.
+SdCard card;
+Fat16 file;
+
+void writeNumber(uint32_t n) {
+  uint8_t buf[10];
+  uint8_t i = 0;
+  do {
+    i++;
+    buf[sizeof(buf) - i] = n%10 + '0';
+    n /= 10;
+  } while (n);
+  file.write(&buf[sizeof(buf) - i], i); // write the part of buf with the number
+}
+
+
+boolean fat_init() {
+
+  // init sd card
+  if (!card.begin(CHIP_SELECT)) {
+    Serial.print(F("failed card.begin "));
+    Serial.println(card.errorCode);
+    return false;
+  } else {
+    Serial.println(F("card.begin"));
+  }
+  
+  // initialize a FAT16 volume
+  if (!Fat16::init(&card)) {
+    Serial.println(F("failed Fat16::init"));
+    return false;
+  } else {
+    Serial.println(F("Fat16::init"));
+  }
+
+  // create a new file
+  char name[] = "WRITE00.TXT";
+  for (uint8_t i = 0; i < 100; i++) {
+    name[5] = i/10 + '0';
+    name[6] = i%10 + '0';
+    // O_CREAT - create the file if it does not exist
+    // O_EXCL - fail if the file exists
+    // O_WRITE - open for write
+    if (file.open(name, O_CREAT | O_EXCL | O_WRITE)) break;
+  }
+  Serial.println(name);
+  return true;
+}
+
+
+  /*
+  if (!file.isOpen()) {
+    Serial.println("failed file.open");
+    //return;
+  } else {
+    Serial.println("file.open");
+  }
+  Serial.println("Writing to: ");
+  Serial.println(name);
+  
+  // write 100 line to file
+  for (uint16_t i = 0; i < 3000; i++) {
+    file.write("line "); // write string from RAM
+    writeNumber(i);
+    file.write_P(PSTR(" millis = ")); // write string from flash
+    writeNumber(millis());
+    file.write("\r\n"); // file.println() would work also
+  }
+  // close file and force write of all data to the SD card
+  file.close();
+  Serial.println("Done");
+}
+*/
+
+
+
+/*
+SdFat SD;
+File myFile;
+
+file_stuff() {
+  if (!SD.begin(SS)) {
+    Serial.println("initialization failed!");
+    return;
+  }
+  myFile = SD.open("test.txt", FILE_WRITE);
+  if (myFile) {
+    Serial.print("Writing to test.txt...");
+    myFile.println("testing 1, 2, 3.");
+    // close the file:
+    myFile.close();
+    Serial.println("done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening test.txt");
+  }
+}
+*/
+
+
+boolean getFirmware()
+{ 
+  unsigned int httpStatus;
+  unsigned int datalen;
+  char url[128];
+
+  boolean success = false;
+  int attempts = 0;
+
+
+
+  //file_stuff();
+  if (!fat_init()) return;
+
+  if (!file.isOpen()) {
+    Serial.println(F("file open failed"));
+    return;
+  }
+
+  fonaOn();
+                fona.sendCheckReply (F("AT+IFC=2,2"), F("OK"));
+                //fonaSerial.write(XON);
+        pinMode (FONA_RTS, OUTPUT);
+        digitalWrite(FONA_RTS, LOW);
+
+
+  //sprintf (url, "data.sparkfun.com/input/%s?private_key=%s&1_streamheight=%d&2_charging=%d&3_voltage=%d", PUBLIC_KEY, PRIVATE_KEY, streamHeight, solar, voltage);
+  //sprintf (url, "http://colab-cambodia.com/");
+  sprintf (url, "http://csb.stanford.edu/class/public/pages/sykes_webdesign/05_simple.html");
+
+  Serial.println(F("fetching firmware"));
+  if (!fona.HTTP_GET_start (url, &httpStatus, &datalen)) {
+    Serial.println("Failed!");
+    return false;
+  }
+
+  //fona.HTTP_GET_start (url, &httpStatus, &datalen);
+  //fona.HTTP_GET_end();
+        
+  if (httpStatus == 200)    //  If the HTTP GET request returned a 200, it succeeded
+  {
+    Serial.println(F("http OK"));
+    //Serial.println(F("****"));
+
+    if (file.isOpen()) {
+      //Serial.print(F("writing "));
+      uint8_t n = 0;
+      while (datalen > 0) {
+        if (fona.available()) {
+          url[n++] = fona.read();
+          if (n == 128) {
+            //fonaSerial.write(XOFF);
+            digitalWrite(FONA_RTS, HIGH); // XOFF
+
+            n = 0;
+            file.write(url, 128);
+            loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
+            UDR0 = '.';
+            wait(500);
+
+            //fonaSerial.write(XON);
+            digitalWrite(FONA_RTS, LOW); // XON
+          }
+
+          datalen--;
+        }
+      }
+      Serial.println(F("\n****"));
+                fona.sendCheckReply (F("AT+IFC=0,0"), F("OK"));
+      file.close();
+
+    } else {
+      while (datalen > 0) {
+        while (fona.available()) {
+          char c = fona.read();
+
+          // Serial.write is too slow, we'll write directly to Serial register!
+#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+          Serial.write(c);
+          //loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
+          //UDR0 = c;
+#else
+          Serial.write(c);
+#endif
+          datalen--;
+          if (! datalen) break;
+        }
+      }
+      Serial.println(F("\n****"));
+    }
+  }
+  fona.HTTP_GET_end();
+  fonaOff();
+}
+
+
 
 
 boolean ivr (const char* flow)
@@ -804,8 +1071,8 @@ boolean ivr (const char* flow)
         Serial.print (TARGETCONTACT);
         Serial.println (F("\"}"));
 
-        int statusCode;
-        int dataLen;
+        uint16_t statusCode;
+        uint16_t dataLen;
 
         fona.HTTP_action (1, &statusCode, &dataLen, 10000);   //  Send the POST request we've constructed
 
@@ -844,7 +1111,7 @@ boolean ivr (const char* flow)
 
 
 
-void checkSMS()
+void checkSMS (void)
 {
         //  Check SMS messages received for any valid commands
         
@@ -1018,35 +1285,28 @@ void checkSMS()
 
 boolean validate (int alertThreshold)
 {
-        /*   False positives would undermine confidence in the IVR alerts, so we must take
-         *   pains to avoid them. Before triggering an Ilhapush alert flow, we will validate
-         *   the reading by taking five readings and making sure they _all_ agree. If the
-         *   levels are marginal, that might mean we don't send an alert for a while (because
-         *   some readings might come in below the threshold).
-         */
+  /*   False positives would undermine confidence in the IVR alerts, so we must take
+   *   pains to avoid them. Before triggering an Ilhapush alert flow, we will validate
+   *   the reading by taking five readings and making sure they _all_ agree. If the
+   *   levels are marginal, that might mean we don't send an alert for a while (because
+   *   some readings might come in below the threshold).
+   */
 
-        boolean dissent = false;
+  boolean valid = true;
 
-        for (int i = 0; i < 5; i++)
-        {
-                wait (5000);
-                Serial.print (F("Validation reading #"));
-                Serial.println (i);
-                int doubleCheck = takeReading();
-                if (doubleCheck < alertThreshold)
-                {
-                        Serial.println (F("Validation does not agree."));
-                        dissent = true;
-                        break;
-                }
-        }
+  for (int i = 0; i < 5; i++)
+  {
+    wait (5000);
+    Serial.print (F("Validation reading #"));
+    Serial.println (i);
+    int doubleCheck = takeReading();
+    if (doubleCheck < alertThreshold)
+    {
+      Serial.println (F("Validation does not agree."));
+      valid = false;
+      break;
+    }
+  }
 
-        if (dissent == true)
-        {
-                return false;
-        }
-        else
-        {
-                return true;
-        }
+  return valid;
 }
