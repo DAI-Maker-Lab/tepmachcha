@@ -1,19 +1,19 @@
-#Tepmachcha
+# Tepmachcha
 
 ![tepmacha](https://raw.githubusercontent.com/DAI-Maker-Lab/tepmachcha/master/photos/tepmachcha.JPG)
 
-##Flood Early Warning Using Sonar and IVR
+## Flood Early Warning Using Sonar and IVR
 Tepmachcha is an open source sonar stream gauge designed to give early warning of flood conditions to residents in vulnerable areas. When a flood condition is detected, Tepmachcha triggers a call with a voice recording via the RapidPro interactive voice response (IVR) system. It also records water levels at regular intervals for later analysis of flooding patterns or to inform more complex hydrological analysis. 
 
 Tepmachcha was designed at the [DAI Maker Lab](http://dai.com/makerlab) in collaboration with [People in Need Cambodia](https://www.clovekvtisni.cz/en/humanitary-aid/country/cambodia) with funding from USAID's [Development Innovations](http://www.development-innovations.org/) project, People in Need, and DAI. It is a fork of the [*Hidrosónico* sonar stream gauge](https://github.com/DAI-Maker-Lab/hidrosonico) piloted by DAI in Honduras as part of the [USAID Proparque](http://en.usaid-proparque.org/) project. It is released under the MIT License.
 
-##Matsya/Tepmachcha
+## Matsya/Tepmachcha
 The world-reknowned friezes at Angkor Wat depict scenes from Cambodian history and Hindu mythology, including the [tale of the god Vishnu appearing in the form of a fish to warn mankind of a catastrophic flood](https://en.wikipedia.org/wiki/Matsya). This fish avatar, known in Sanskrit as "Matsya", is called "Tepmachcha" in Khmer, and is the namesake of the project.
 
-##What Tepmachcha Does: The Short Story
+## What Tepmachcha Does: The Short Story
 Tepmachcha uses sonar to read the level of water in a river, stream, or canal, at regular intervals determined by the user. It uses a cellular data connection to report that level to an internet server. If Tepmachcha detects water level in excess of yellow or red alert limits set by the user, it sends an HTTP POST request that triggers an instance of the RapidPro IVR system to make a voice call that warns users in the affected area(s). Certain operational commands can be sent to the unit by SMS.
 
-##The DAI Maker Lab Design Approach
+## The DAI Maker Lab Design Approach
 The DAI Maker Lab leverages emerging tools and approaches associated with the maker movement to build devices and capacity that empower people in developing countries to apply technology to problems. The goal is hardware that can be locally built, repaired, maintained and extended. Toward that end, DAI Maker Lab designs:
 
 * Are always released as open source.
@@ -22,7 +22,7 @@ The DAI Maker Lab leverages emerging tools and approaches associated with the ma
 * Prefer well-documented component hardware, and hardware with an existing community of development and support, to maximize value to end users.
 * Prefer transparency to non-expert users over optimal computational or engineering design.
 
-##Hardware
+## Hardware
 The bill of materials for Tepmachcha includes:
 
 * The [**Seeeduino Stalker v3.0**](http://www.seeedstudio.com/wiki/Seeeduino-Stalker_v3) Arduino-compatible microcontroller board. The Stalker is not the most commonly available Arduino-compatible board, and to be honest, the English documentation -- while much improved over the last year -- is not perfect. But its optimization for low-power operation; inclusion of a solar battery charging circuit, real-time clock (RTC), and XBee socket; and reasonable price make it a good choice for Tepmachcha. 
@@ -34,7 +34,7 @@ The bill of materials for Tepmachcha includes:
 
 The complete bill of materials is included in the repository.
 
-##Libraries##
+## Libraries
 Tepmachcha uses:
 
 * The [Adafruit FONA library](https://github.com/adafruit/Adafruit_FONA_Library).
