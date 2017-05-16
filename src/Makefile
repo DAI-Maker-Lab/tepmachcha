@@ -8,7 +8,7 @@ ARDUINO_PORT = /dev/tty.SLAB_USBtoUART
 # tepmachcha
 F_CPU=8000000L
 BOARD_TAG    = uno
-ARDUINO_LIBS = DS1337 Sleep_n0m1 Adafruit_FONA_Library SoftwareSerial Wire Fat16
+ARDUINO_LIBS = DS1337 Sleep_n0m1 Adafruit_FONA_Library SoftwareSerial Wire Fat16 EEPROM
 
 ARDUINO_HEADER=arduino-mk.h		# include our own header, which includes Arduino.h, and function prototypes
 ARDUINO_DIR   = /Applications/Arduino2.app/Contents/Java
