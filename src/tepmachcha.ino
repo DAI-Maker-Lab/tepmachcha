@@ -39,7 +39,6 @@ boolean sendRed[ZONES] = {false, false};
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
-#include <Adafruit_FONA.h>
 #include <DS1337.h>           //  For the Stalker's real-time clock (RTC)
 #include <Sleep_n0m1.h>       //  Sleep library
 #include <SoftwareSerial.h>   //  For serial communication with FONA
@@ -47,6 +46,7 @@ boolean sendRed[ZONES] = {false, false};
 //#include <I2C.h>             //  replacemnet I2C library
 #include <Fat16.h>            //  FAT16 library for SD card
 #include <EEPROM.h>           //  EEPROM lib
+#include "Adafruit_FONA_ftp.h"
 
 #define RTCINT 0    //  RTC interrupt number
 
@@ -67,7 +67,6 @@ boolean sendRed[ZONES] = {false, false};
 #define XON  17
 #define XOFF 19
 
-
 #define DOTIMES(x) for(uint16_t _i=x; _i;_i--)
 
 
@@ -82,7 +81,7 @@ char method = 0;                //  Method of clock set, for debugging
 DateTime now;
 
 SoftwareSerial fonaSerial = SoftwareSerial (FONA_TX, FONA_RX);
-Adafruit_FONA fona = Adafruit_FONA (FONA_RST);
+Adafruit_FONA_ftp fona = Adafruit_FONA_ftp (FONA_RST);
 
 DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 Sleep sleep;        //  Create the sleep object
@@ -95,11 +94,34 @@ static void rtcIRQ (void)
 
 
 
+/* Get battery reading on ADC pin BATT, in mV
+ * VBAT is divided by a 10k/2k voltage divider to BATT so
+ *   mV = BATT * (AREF * ((10+2)/2) / 1.023)
+ * We use integer math to avoid including >1.2K of FP/multiplication library
+ * AREF ADC->mV factor   approx integer fraction
+ * 1.1  6.4516129        1651/256 (~413/64)
+ * 3.3  19.3548387       4955/256 (~155/8)
+ */
+uint16_t readBattery(void) {
+
+  uint16_t adc;
+  uint32_t mV;
+
+  adc = analogRead(BATT);
+
+  // 155 = 128 + 32 - 4 - 1
+  mV = adc * 128;
+  mV += adc * 32;
+  mV -= adc * 4;
+  mV -= adc;
+  return mV / 8;
+}
+
+
 void setup (void)
 {
-		uint32_t nn = 0;
-		uint16_t n = 0;
-  //EEPROM.update(1023, 0x1);
+		uint32_t mV = 0;
+		uint16_t adc = 0;
 
 		Wire.begin(); //  Begin the I2C interface
 		RTC.begin();  //  Begin the RTC        
@@ -114,31 +136,17 @@ void setup (void)
 		//analogReference (INTERNAL); // 1.1 on atmega328
 		//analogReference(EXTERNAL);  // 3.3?
 		analogReference(DEFAULT);     // 3.3?
+    // After change reference, first few readings are wrong
+		DOTIMES(4) { adc = analogRead(BATT); delay(50); }
 
 		Serial.print (F("Startup voltage "));
-
-    // After change reference, first few readings are wrong
-		DOTIMES(5) { n = analogRead(A7); delay(50); }
-
-    n = analogRead(A7);
-
-		// Get battery reading on A7 (0-1023) in mV
-		// VBAT (AREF 3.3v) is divided by a 10k/2k divider to A7, so mV = (3.3v * ((10+2)/2) / 1.024)
-		// AREF integer fraction
-		// 1.1  825/128
-		// 3.3  4950/256 (~155/8) 
-
-		// Use integer math 4950/256 (~155/8) to avoid including >1.2k of FP/multiplication logic
-		//DOTIMES(155) nn += n;
-		//Serial.println (nn/8);
-
-		DOTIMES(4950) nn += n;
-		Serial.println (nn/256);
+		Serial.println (readBattery());
 
 		pinMode (BEEPIN, OUTPUT);
 		pinMode (RANGE, OUTPUT);
 		pinMode (FONA_KEY, OUTPUT);
 		pinMode (FONA_RX, OUTPUT);
+
 
 		/*   If the voltage at startup is less than 3.5V, we assume the battery died in the field
 		 *   and the unit is attempting to restart after the panel charged the battery enough to
@@ -147,12 +155,7 @@ void setup (void)
 		 *   measured voltage is less than 3.5V, we will put the unit to sleep and wake once per 
 		 *   hour to check the charge status.
 		 */
-
-
-/* JACK
-		//while (analogRead (A7) < 547)   
-    //for(n=8; 
-		while (analogRead (A7) < 180)   
+		while (readBattery() < 3500)   
 		{
 				Serial.println (F("Sleeping to save power..."));
 				Serial.flush();
@@ -165,7 +168,6 @@ void setup (void)
 				sleep.pwrDownMode();                    //  Set sleep mode to Power Down
 				sleep.sleepInterrupt (RTCINT, FALLING); //  Sleep; wake on falling voltage on RTC pin
 		}
-*/
 
 		digitalWrite (RANGE, HIGH);          //  If set low, sonar will not range
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
@@ -325,6 +327,7 @@ void loop (void)
 }
 
 
+
 void upload(int streamHeight)
 {
 		fonaOn();
@@ -408,9 +411,6 @@ void wait (unsigned long period)
 
 boolean fonaOn()
 {
-
-		pinMode (FONA_RTS, OUTPUT);
-		digitalWrite(FONA_RTS, HIGH);
 
 		if (digitalRead (FONA_PS) == LOW)             //  If the FONA is off...
 		{
@@ -820,12 +820,13 @@ boolean sendReading (int streamHeight)
 
 
 
+//#define CHIP_SELECT SS;  // SD chip select pin. (SS = 10)
 const uint8_t CHIP_SELECT = SS;  // SD chip select pin.
 SdCard card;
 Fat16 file;
 char file_name[12] = "FIRMWARE.HEX";
 
-boolean fat_init() {
+boolean fat_init(void) {
 
   // init sd card
   if (!card.begin(CHIP_SELECT)) {
@@ -930,7 +931,6 @@ file_stuff() {
 */
 
 
-
 void reboot(void)
 {
 	WDTCSR = _BV(WDE);
@@ -950,24 +950,27 @@ void writeEeprom(void)
   EEPROM.update( (E2END-11), 'E' );
   EEPROM.update( (E2END-12), 'X' );
 
-  EEPROM.write(E2END, 1); // not 0xff triggers a flash from SD card attempt on boot
+  EEPROM.update(E2END, 1); // not 0xff triggers an attempt to flash from SD card on boot
 }
+
 
 
 // serial flow control on
 void xon(void) {
   //fonaSerial.write(XOFF);
-  //digitalWrite(FONA_RTS, LOW); // XOFF
+  //digitalWrite(FONA_RTS, LOW);
 }
 
 // serial flow control off
 void xoff(void) {
   //fonaSerial.write(XON);
-  //digitalWrite(FONA_RTS, HIGH); // XON
+  //digitalWrite(FONA_RTS, HIGH);
 }
 
 
-// Read len bytes into buffer (max 256) w/ timeout, and write buffer to file
+
+
+// Read len bytes into buffer (max bufsize) w/ timeout
 uint8_t readBuffer(uint8_t len)
 {
   char buf[256];
@@ -980,127 +983,62 @@ uint8_t readBuffer(uint8_t len)
       buf[n++] = fona.read();
       len--;
     }
+    //timeout break;
   }
   xoff();
-  file.write(buf, len);
 
-  return code;
+  return n;
 }
 
+
+
+/* this needs to be in the readBuffer func to access buf[]
+, and write buffer to file
+  file.write(buf, len);
+*/
 
 void readFile(uint16_t len)
 {
 }
 
 
-uint8_t ftpSetup(void)
+uint8_t getFtp(void)
 {
-}
-
-uint8_t httpSetup(void)
-{
-}
-
-
-boolean getFirmware()
-{ 
-  unsigned int httpStatus = 0;
-  unsigned int datalen = 0;
-  char url[128];
-
-  boolean success = false;
-  int attempts = 0;
-    uint8_t tries;
-
-
-
-  if (!fat_init()) {
-    //return;
-  }
-
-  if (!file.isOpen()) {
-	  Serial.println(F("file open failed"));
-  }
-
-    //fonaOn();
-				//fonaSerial.write(XON);
-
-				//fona.sendCheckReply (F("AT+IFC=2,2"), F("OK"));     // set RTS
-		//pinMode (FONA_RTS, OUTPUT);
-		//digitalWrite(FONA_RTS, HIGH);
-
-  Serial.println(F("fetching firmware"));
-
-  //sprintf (url, "http://hckrnews.com/");
-
-    fona.sendCheckReply (F("AT+IFC=?"), F("OK"));
-		fona.sendCheckReply (F("AT+FTPSSL?"), F("OK"));
 		fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("OK"));
 
-      // delete old files
-      fona.sendCheckReply (F("AT+FSDRIVE=0"), F("OK"));
-      fona.sendCheckReply (F("AT+FSMEM"), F("OK"));
-      fona.sendCheckReply (F("AT+FSLS=?"), F("OK"));
-      fona.sendCheckReply (F("AT+FSLS=C:\\"), F("OK"));
-      fona.sendCheckReply (F("AT+FSLS=C:\\User\\ftp\\"), F("OK"));
-      fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\test.txt"), F("OK"));
-      fona.sendCheckReply (F("AT+FSDEL=C:\\User\\ftp\\test.txt"), F("OK"));
-      fona.sendCheckReply (F("AT+FSMEM"), F("OK"));
-
-// FTP stuff
-		fona.sendCheckReply (F("AT+FTPSSL=0"), F("OK"));   // 0 ftp, 1 implicit (port is an FTPS port), 2 explicit
 		fona.sendCheckReply (F("AT+SSLOPT=0,1"), F("OK")); // 0,x dont check cert, 1,x client auth
+		fona.sendCheckReply (F("AT+FTPSSL=0"), F("OK"));   // 0 ftp, 1 implicit (port is an FTPS port), 2 explicit
+
 		fona.sendCheckReply (F("AT+FTPCID=1"), F("OK"));
+
 		fona.sendCheckReply (F("AT+FTPMODE=1"), F("OK")); // 0 ACTIVE, 1 PASV
 		fona.sendCheckReply (F("AT+FTPTYPE=\"I\""), F("OK")); // "I" binary, "A" ascii
+
 		fona.sendCheckReply (F("AT+FTPSERV=\"hackerspacephnompenh.com\""), F("OK"));
 		fona.sendCheckReply (F("AT+FTPUN=\"ftpuser\""), F("OK"));
 		fona.sendCheckReply (F("AT+FTPPW=\"t0ult0mp0ng\""), F("OK"));
+
 		fona.sendCheckReply (F("AT+FTPGETNAME=\"blinkftp.hex\""), F("OK"));
 		fona.sendCheckReply (F("AT+FTPGETNAME=\"blink.hex\""), F("OK"));
+
 		fona.sendCheckReply (F("AT+FTPGETPATH=\"/home/ftpuser/files/\""), F("OK"));
 
-		fona.sendCheckReply (F("AT+FTPGETTOFS=0,\"test.txt\""), F("OK"));
+		fona.sendCheckReply (F("AT+FTPGETTOFS=0,\"tmp.bin\""), F("OK"));
 
-    for (tries = 24; tries > 0; tries--) {
+    DOTIMES(24) {
       delay(1000);
 		  fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("OK"));
     }
-/*
 
-      // FONAFlashStringPtr toreply, uint16_t *v, char divider, uint8_t index) {
-      // Parse +FTPGETTOFS: 1,1348,0
-      fona.sendParseReply( F("AT+FTPGETTOFS?"), F("+FTPGETTOFS:"), &url, ',', 1);
-      if (strcmp(url, "0") {
-      }
-
-*/
-
-
-		//fona.sendCheckReply (F("AT+FTPGET?"), F("OK"));
 		//fona.sendCheckReply (F("AT+FTPEXTGET?"), F("OK"));
 		//fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("OK"));
 
-    //fona.expectReply(F("+FTPGET:1,1"));
-
-    //fona.sendCheckReply (F("AT+FTPEXTGET=2,\"download.hex\""), F("OK"));
-
     //fona.sendCheckReply (F("AT+FTPEXTGET=3,0,100"), F("OK"));
-
     //fona.sendCheckReply (F("AT+FTPGET=2,2640"), F("OK"));
-
-    //fona.sendCheckReply (F("AT+FTPGET=2,200"), F("OK"));
     //fona.expectReply(F("+FTPGET:1,1"));
-
-				
-    //fona.sendCheckReply (F("AT+FTPGET=2,2640"), F("OK"));
-
 
 		//fona.sendCheckReply (F("AT+FTPQUIT"), F("OK"));
 		//fona.sendCheckReply (F("AT+FTPSHUT"), F("OK"));
-
-    httpStatus = 200;
-    datalen = 2640;
 
 		  fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("OK"));
       fona.sendCheckReply (F("AT+FSMEM"), F("OK"));
@@ -1108,13 +1046,19 @@ boolean getFirmware()
       fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\test.txt"), F("OK"));
 
       //fona.sendCheckReply (F("AT+FSREAD=C:\\User\\ftp\\test.txt,1,3000,0"), F("OK"));
-      fona.sendCheckReply (F("ATQ1"), F(""));
-      fona.flush();
       //fonaSerial.flush();
-      fonaSerial.println(F("AT+FSREAD=C:\\User\\ftp\\test.txt,1,3000,50236"));
-// FTP
 
+      fona.sendCheckReply (F("ATQ1"), F(""));
+      flushFona();
 
+      fonaSerial.println(F("AT+FSREAD=C:\\User\\ftp\\tmp.bin,1,3000,50236"));
+}
+
+uint8_t getHttp(void)
+{
+  unsigned int httpStatus = 0;
+  unsigned int datalen = 0;
+  uint8_t tries;
 /*
 // HTTP file download - working for small files
 		fona.sendCheckReply (F("AT+HTTPINIT"), F("OK"));
@@ -1126,7 +1070,6 @@ boolean getFirmware()
     //fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"csb.stanford.edu/class/public/pages/sykes_webdesign/05_simple.html\""), F("OK"));
 		fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"jackbyte.fastmail.fm/pin/blink.hex\""), F("OK"));
 
-    //uint8_t tries;
     //for (tries = 5; tries > 0; tries--) {
     for (tries = 0; tries > 0; tries--) {
       fona.HTTP_action(0, &httpStatus, &datalen, 30000);
@@ -1147,10 +1090,56 @@ boolean getFirmware()
   }
 // HTTP
 */
+}
+
+
+boolean getFirmware()
+{ 
+  unsigned int httpStatus = 0;
+  unsigned int datalen = 0;
+  char url[128];
+
+  boolean success = false;
+  int attempts = 0;
+
+  if (!fat_init()) {
+    //return;
+  }
+
+  if (!file.isOpen()) {
+	  Serial.println(F("file open failed"));
+  }
+
+    //fonaOn();
+				//fonaSerial.write(XON);
+
+				//fona.sendCheckReply (F("AT+IFC=2,2"), F("OK"));     // set RTS
+		//pinMode (FONA_RTS, OUTPUT);
+		//digitalWrite(FONA_RTS, HIGH);
+
+  Serial.println(F("fetching firmware"));
+
+
+    fona.sendCheckReply (F("AT+IFC=?"), F("OK"));
+		fona.sendCheckReply (F("AT+FTPSSL?"), F("OK"));
+
+      // delete old files
+      fona.sendCheckReply (F("AT+FSDRIVE=0"), F("OK"));
+      fona.sendCheckReply (F("AT+FSMEM"), F("OK"));
+      fona.sendCheckReply (F("AT+FSLS=?"), F("OK"));
+      fona.sendCheckReply (F("AT+FSLS=C:\\"), F("OK"));
+      fona.sendCheckReply (F("AT+FSLS=C:\\User\\ftp\\"), F("OK"));
+      fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\test.txt"), F("OK"));
+      fona.sendCheckReply (F("AT+FSDEL=C:\\User\\ftp\\test.txt"), F("OK"));
+      fona.sendCheckReply (F("AT+FSMEM"), F("OK"));
+
+  getFtp();
+
+
 		
-  if (httpStatus == 200)    //  If the HTTP GET request returned a 200, it succeeded
+  if (success)
   {
-    Serial.println(F("http OK"));
+    Serial.println(F("fetch OK"));
     Serial.println(F(">>>>>reading file"));
 
 
@@ -1472,16 +1461,18 @@ boolean validate (int alertThreshold)
 
   for (int i = 0; i < 5; i++)
   {
-	wait (5000);
-	Serial.print (F("Validation reading #"));
-	Serial.println (i);
-	int doubleCheck = takeReading();
-	if (doubleCheck < alertThreshold)
-	{
-	  Serial.println (F("Validation does not agree."));
-	  valid = false;
-	  break;
-	}
+	  wait (5000);
+	  Serial.print (F("Validation reading #"));
+	  Serial.println (i);
+
+	  int doubleCheck = takeReading();
+
+	  if (doubleCheck < alertThreshold)
+    {
+	    Serial.println (F("Validation does not agree."));
+	    valid = false;
+	    break;
+	  }
   }
 
   return valid;
