@@ -14,3 +14,18 @@ void Adafruit_FONA_ftp::showline(char *buf) {
     if (!(buf[x] = replybuffer[x])) break;
   }
 }
+
+
+boolean Adafruit_FONA_ftp::getFtp() {
+  uint16_t status = 1;
+
+  while (status) {
+
+    //parseReply(F("+FTPGETTOFS:"), &status, ',', 0);
+    //AT+FTPGETTOFS?
+  }
+
+}
+
+//boolean Adafruit_FONA::parseReply(FONAFlashStringPtr toreply,
+          //uint16_t *v, char divider, uint8_t index) {

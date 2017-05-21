@@ -134,8 +134,8 @@ void setup (void)
 		Serial.println (__TIME__);
 
 		//analogReference (INTERNAL); // 1.1 on atmega328
-		//analogReference(EXTERNAL);  // 3.3?
-		analogReference(DEFAULT);     // 3.3?
+		//analogReference(EXTERNAL);  // 3.3
+		analogReference(DEFAULT);     // 3.3
     // After change reference, first few readings are wrong
 		DOTIMES(4) { adc = analogRead(BATT); delay(50); }
 
@@ -179,7 +179,7 @@ void setup (void)
 		fonaOff();
     while (1);
 
-		//  We will use the FONA to get the current time to set the Stalker's RTC
+		// We will use the FONA to get the current time to set the Stalker's RTC
 		fonaOn();
 		clockSet();
 		
@@ -824,7 +824,7 @@ boolean sendReading (int streamHeight)
 const uint8_t CHIP_SELECT = SS;  // SD chip select pin.
 SdCard card;
 Fat16 file;
-char file_name[12] = "FIRMWARE.HEX";
+char file_name[] = "FIRMWARE.HEX";
 
 boolean fat_init(void) {
 
@@ -946,9 +946,9 @@ void writeEeprom(void)
   for (x = 0; x < 8; x++) {
     EEPROM.update( ((E2END-1)-x), file_name[x] );
   }
-  EEPROM.update( (E2END-10), 'H' );
-  EEPROM.update( (E2END-11), 'E' );
-  EEPROM.update( (E2END-12), 'X' );
+  EEPROM.update( (E2END-9), 'H' );
+  EEPROM.update( (E2END-10), 'E' );
+  EEPROM.update( (E2END-11), 'X' );
 
   EEPROM.update(E2END, 1); // not 0xff triggers an attempt to flash from SD card on boot
 }
@@ -987,72 +987,29 @@ uint8_t readBuffer(uint8_t len)
   }
   xoff();
 
+  file.write(buf, n);
+
   return n;
 }
 
 
 
-/* this needs to be in the readBuffer func to access buf[]
-, and write buffer to file
-  file.write(buf, len);
-*/
-
-void readFile(uint16_t len)
+boolean readFtpFile(uint16_t len)
 {
+  uint32_t address = 0;
+
+  fona.sendCheckReply (F("ATQ1"), F(""));
+  flushFona();
+  fonaSerial.println(F("AT+FSREAD=C:\\User\\ftp\\tmp.bin,1,3000,addess"));
+
+  //fonaSerial.println(F("AT+FSREAD=C:\\User\\ftp\\tmp.bin,1,52880,0"));
+  flushFona();
+  delay(100);
+
+  return true;
 }
 
 
-uint8_t getFtp(void)
-{
-		fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("OK"));
-
-		fona.sendCheckReply (F("AT+SSLOPT=0,1"), F("OK")); // 0,x dont check cert, 1,x client auth
-		fona.sendCheckReply (F("AT+FTPSSL=0"), F("OK"));   // 0 ftp, 1 implicit (port is an FTPS port), 2 explicit
-
-		fona.sendCheckReply (F("AT+FTPCID=1"), F("OK"));
-
-		fona.sendCheckReply (F("AT+FTPMODE=1"), F("OK")); // 0 ACTIVE, 1 PASV
-		fona.sendCheckReply (F("AT+FTPTYPE=\"I\""), F("OK")); // "I" binary, "A" ascii
-
-		fona.sendCheckReply (F("AT+FTPSERV=\"hackerspacephnompenh.com\""), F("OK"));
-		fona.sendCheckReply (F("AT+FTPUN=\"ftpuser\""), F("OK"));
-		fona.sendCheckReply (F("AT+FTPPW=\"t0ult0mp0ng\""), F("OK"));
-
-		fona.sendCheckReply (F("AT+FTPGETNAME=\"blinkftp.hex\""), F("OK"));
-		fona.sendCheckReply (F("AT+FTPGETNAME=\"blink.hex\""), F("OK"));
-
-		fona.sendCheckReply (F("AT+FTPGETPATH=\"/home/ftpuser/files/\""), F("OK"));
-
-		fona.sendCheckReply (F("AT+FTPGETTOFS=0,\"tmp.bin\""), F("OK"));
-
-    DOTIMES(24) {
-      delay(1000);
-		  fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("OK"));
-    }
-
-		//fona.sendCheckReply (F("AT+FTPEXTGET?"), F("OK"));
-		//fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("OK"));
-
-    //fona.sendCheckReply (F("AT+FTPEXTGET=3,0,100"), F("OK"));
-    //fona.sendCheckReply (F("AT+FTPGET=2,2640"), F("OK"));
-    //fona.expectReply(F("+FTPGET:1,1"));
-
-		//fona.sendCheckReply (F("AT+FTPQUIT"), F("OK"));
-		//fona.sendCheckReply (F("AT+FTPSHUT"), F("OK"));
-
-		  fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("OK"));
-      fona.sendCheckReply (F("AT+FSMEM"), F("OK"));
-      fona.sendCheckReply (F("AT+FSLS=C:\\User\\ftp\\"), F("OK"));
-      fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\test.txt"), F("OK"));
-
-      //fona.sendCheckReply (F("AT+FSREAD=C:\\User\\ftp\\test.txt,1,3000,0"), F("OK"));
-      //fonaSerial.flush();
-
-      fona.sendCheckReply (F("ATQ1"), F(""));
-      flushFona();
-
-      fonaSerial.println(F("AT+FSREAD=C:\\User\\ftp\\tmp.bin,1,3000,50236"));
-}
 
 uint8_t getHttp(void)
 {
@@ -1093,14 +1050,68 @@ uint8_t getHttp(void)
 }
 
 
+void ftpEnd(void) {
+  fona.sendCheckReply (F("AT+FTPQUIT"), F("OK"));
+  //fona.sendCheckReply (F("AT+FTPSHUT"), F("OK"));
+}
+
+boolean getFtp(void)
+{
+		if (!fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("+FTPGETTOFS: 0"))) return false;
+
+		fona.sendCheckReply (F("AT+SSLOPT=0,1"), F("OK")); // 0,x dont check cert, 1,x client auth
+		fona.sendCheckReply (F("AT+FTPSSL=0"), F("OK"));   // 0 ftp, 1 implicit (port is an FTPS port), 2 explicit
+
+		fona.sendCheckReply (F("AT+FTPCID=1"), F("OK"));
+
+		fona.sendCheckReply (F("AT+FTPMODE=1"), F("OK")); // 0 ACTIVE, 1 PASV
+		fona.sendCheckReply (F("AT+FTPTYPE=\"I\""), F("OK")); // "I" binary, "A" ascii
+
+		fona.sendCheckReply (F("AT+FTPSERV=\"hackerspacephnompenh.com\""), F("OK"));
+		fona.sendCheckReply (F("AT+FTPUN=\"ftpuser\""), F("OK"));
+		fona.sendCheckReply (F("AT+FTPPW=\"t0ult0mp0ng\""), F("OK"));
+
+		fona.sendCheckReply (F("AT+FTPGETNAME=\"blinkftp.hex\""), F("OK"));
+		fona.sendCheckReply (F("AT+FTPGETNAME=\"blink.hex\""), F("OK"));
+
+		fona.sendCheckReply (F("AT+FTPGETPATH=\"/home/ftpuser/files/\""), F("OK"));
+
+		fona.sendCheckReply (F("AT+FTPGETTOFS=0,\"tmp.bin\""), F("OK"));
+
+		uint32_t timeout = millis() + 60000;
+    while(!fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("+FTPGETTOFS: 0"))) {
+      delay(1000);
+      if (millis() > timeout) {
+        ftpEnd();
+        return false;
+      }
+    }
+
+    if (fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\tmp.bin"), F("ERROR"))) {
+      return false;
+    }
+
+    /*
+    if (!fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\tmp.bin"), F("+FSFLSIZE: 52880"))) {
+      fona.sendCheckReply (F("AT+FSDEL=C:\\User\\ftp\\tmp.bin"), F("OK"));
+      return false;
+    }
+    */
+
+    ftpEnd();
+    return true;
+}
+
+
+
 boolean getFirmware()
 { 
-  unsigned int httpStatus = 0;
-  unsigned int datalen = 0;
+  uint16_t httpStatus = 0;
+  uint16_t datalen = 0;
   char url[128];
 
   boolean success = false;
-  int attempts = 0;
+  uint8_t attempts = 0;
 
   if (!fat_init()) {
     //return;
@@ -1129,11 +1140,19 @@ boolean getFirmware()
       fona.sendCheckReply (F("AT+FSLS=?"), F("OK"));
       fona.sendCheckReply (F("AT+FSLS=C:\\"), F("OK"));
       fona.sendCheckReply (F("AT+FSLS=C:\\User\\ftp\\"), F("OK"));
+
       fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\test.txt"), F("OK"));
       fona.sendCheckReply (F("AT+FSDEL=C:\\User\\ftp\\test.txt"), F("OK"));
+
+      fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\tmp.bin"), F("OK"));
+      fona.sendCheckReply (F("AT+FSDEL=C:\\User\\ftp\\tmp.bin"), F("OK"));
+
       fona.sendCheckReply (F("AT+FSMEM"), F("OK"));
 
-  getFtp();
+  if ( getFtp() ) {
+     success = readFtpFile(2640);
+     datalen = 2640; // 52880
+  }
 
 
 		
@@ -1185,7 +1204,7 @@ boolean getFirmware()
 
   Serial.println(F("\n****"));
 
-  fona.HTTP_GET_end();
+  //fona.HTTP_GET_end();
   //fonaOff();
 
   // set eeprom filename, toggle, and reboot
