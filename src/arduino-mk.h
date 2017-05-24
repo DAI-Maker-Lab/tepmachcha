@@ -1,7 +1,10 @@
 /*
  * arduino-mk.h
- * generate this file with cproto (first copy .ino to .c, then cproto -s file.c)
- * should be a new arduino-preproc command that uses ctags
+ * This is required when compiling with arduino-mk, and gets included with
+ * a -I addtion to gcc command line in the makefile
+ *
+ * Generate this file with cproto (first copy .ino to .c, then cproto -s file.c)
+ * there may be a new arduino-preproc command that uses ctags - investigate
  */
 #include <Arduino.h>
 
@@ -20,3 +23,4 @@ boolean sendReading (int);
 boolean validate (int);
 boolean ivr (const char*);
 boolean getFirmware ();
+uint16_t readBattery(void);
