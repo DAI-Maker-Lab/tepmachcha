@@ -7,6 +7,10 @@
 #define PRIVATE_KEY "YOUR_PRIVATE_KEY"    //  Private key for phant stream
 #define APITOKEN "YOUR_RAPIDPRO_API_TOKEN"  //  Rapidpro API token
 #define TARGETCONTACT "TARGET_CONTACT_UUID" //  Rapidpro needs at least a dummy contact 
+
+#define FTPSERVER "YOUR FTP SERVER"
+#define FTPUSER   "YOUR FTP USER"
+#define FTPPW     "YOUR FTP PASSWORD"
 				                            //  to start a flow
 #define SENSOR_HEIGHT 100   //  Height of top of octagonal gasket from streambed, in cm
 #define UTCOFFSET 0         //  Local standard time variance from UTC
@@ -28,7 +32,6 @@
 /*   If you do not define yellow, red, yellowFlow, redFlow and alert for all of your zones, 
  *   weird things will happen. Don't forget that zones will be numbered starting from zero.
  */
- 
 const int yellow[ZONES] = {550, 500};        //  Yellow alert level for Zones 0 & 1
 const int red[ZONES] = {600, 550};           //  Red alert level for Zones 0 & 1
 const char* yellowFlow[ZONES] = {"RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_0", "RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_1"};
@@ -1311,10 +1314,11 @@ uint16_t readBuffer(char *buf, uint16_t len)
 
 
 #define READ_BUFFER_SIZE 256
+#define READ_BUFFER_SIZE 512
 boolean ftpCopyFile(uint16_t len)
 {
   uint32_t address = 0;
-  //char buf[READ_BUFFER_SIZE+1];
+  //char buf[READ_BUFFER_SIZE];
 char buf[READ_BUFFER_SIZE+1]; // extra needed only for println
   uint16_t size;
   uint16_t n;
@@ -1381,14 +1385,11 @@ void ftpEnd(void)
 }
 
 
-#define FTPSERVER "hackerspacephnompenh.com"
-#define FTPUSER   "ftpuser"
-#define FTPPW     "t0ult0mp0ng"
 boolean ftpGet(void)
 {
   char buf[32];
 
-  // ftp download to file supported?
+  // ftp download to file supported and ready?
   if (!fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("+FTPGETTOFS: 0"))) return false;
 
   // configure ftp
