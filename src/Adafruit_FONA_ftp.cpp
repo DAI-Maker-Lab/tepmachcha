@@ -5,6 +5,21 @@ Adafruit_FONA_ftp::Adafruit_FONA_ftp(int8_t r)
 {
 }
 
+/*
+boolean Adafruit_FONA_ftp::sendCheckOK(FONAFlashStringPtr send, uint16_t timeout) {
+  return (sendCheckReply(send, ok_reply, timeout));
+}
+
+boolean Adafruit_FONA_ftp::sendCheckOK(char* send, uint16_t timeout) {
+  return (sendCheckReply(send, ok_reply, timeout));
+}
+*/
+
+
+
+
+
+/*
 void Adafruit_FONA_ftp::showline(char *buf) {
   int x;
 
@@ -16,7 +31,8 @@ void Adafruit_FONA_ftp::showline(char *buf) {
 }
 
 
-boolean Adafruit_FONA_ftp::getFtp() {
+
+boolean Adafruit_FONA_ftp::getFtp(void) {
   uint16_t status = 1;
 
   while (status) {
@@ -26,6 +42,7 @@ boolean Adafruit_FONA_ftp::getFtp() {
   }
 
 }
+*/
 
 //boolean Adafruit_FONA::parseReply(FONAFlashStringPtr toreply,
           //uint16_t *v, char divider, uint8_t index) {
