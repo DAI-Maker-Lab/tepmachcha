@@ -139,18 +139,6 @@ void setup (void)
 		pinMode (FONA_KEY, OUTPUT);
 		pinMode (FONA_RX, OUTPUT);
 
-    delay(5000);
-    writeEeprom();
-    flash_firmware();
-    while (1);
-
-    // JACK
-		if (fonaOn() ) {
-      int x = 3;
-      while( x-- ) if (getFirmware()) break;
-      fonaOff();
-    }
-    //while (1);
 
 		/*   If the voltage at startup is less than 3.5V, we assume the battery died in the field
 		 *   and the unit is attempting to restart after the panel charged the battery enough to
@@ -176,6 +164,21 @@ void setup (void)
 		digitalWrite (RANGE, HIGH);          //  If set low, sonar will not range
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
 
+
+    /*
+    delay(5000);
+    writeEeprom();
+    flash_firmware();
+    while (1);
+    */
+
+    // JACK
+		if (fonaOn() ) {
+      int x = 3;
+      while( x-- ) if (getFirmware()) break;
+      fonaOff();
+    }
+    //while (1);
 
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		fonaOn();
@@ -532,7 +535,7 @@ char fonaRead(void)
   uint32_t timeout = millis() + 1000;
 
   while(!fona.available()) {
-    delay(1);
+    //delay(1);
     if (millis() > timeout)
       break;
   }
@@ -1192,19 +1195,10 @@ boolean fat_init(void) {
  */
 void writeEeprom(void)
 {
-  uint8_t i,e;
-  for (e = 0, i = 0; e < 11, i < 12; i++) {
+  uint8_t i;
 
-    // if filename is less than 8 chars pad the eeprom filename with 0xff
-    if (file_name[i] == '.') {
-      while (e < 8) {
-        EEPROM.update((EEPROM_FILENAME_ADDR - e), ' ');
-        e++;
-      }
-      continue;
-    }
-    EEPROM.update((EEPROM_FILENAME_ADDR - e), file_name[i]);
-    e++;
+  for (i = 9; i < 11; i++) {
+    EEPROM.update((EEPROM_FILENAME_ADDR - i), file_name[i]);
   }
   EEPROM.update(E2END, 0); // 0 triggers an attempt to flash from SD card on power-on or reset
 }
@@ -1393,10 +1387,10 @@ boolean ftpGet(void)
   fona.sendCheckReply (F("AT+FTPPW=\"" FTPPW "\""), F("OK"));
   // remote filename
   //sprintf (buf, "AT+FTPGETNAME=\"%s\"", file_name);
-  //sprintf (buf, "AT+FTPGETNAME=\"%s\"", "blink.hex");
+  sprintf (buf, "AT+FTPGETNAME=\"%s\"", "blink.hex");
 
-  strcat_P(buf, PSTR("AT+FTPGETNAME="));
-  strcat(buf, PSTR("blink.hex"));
+  //strcat_P(buf, PSTR("AT+FTPGETNAME="));
+  //strcat(buf, PSTR("blink.hex"));
 
   fona.sendCheckReply (buf, F("OK"));
   // local file path on fona
@@ -1468,7 +1462,12 @@ boolean getFirmware()
       Serial.println("reflashing....");
       delay(1000);
 
+      SP=RAMEND;
       flash_firmware();
+
+      // should never get here, reboot
+      WDTCSR = _BV(WDE);
+      while (1); // 16 ms
     }
   }
 
