@@ -74,15 +74,11 @@ boolean sendRed[ZONES] = {false, false};
 
 #define DOTIMES(x) for(uint16_t _i=x; _i;_i--)
 
-// call into bootloader jumptable at addresse 0x7ffc.  /2 because
-// avr flash memory uses word (2 bytes) addressing, not byte addressing
-#define flash_firmware (*((void(*)(void))(0x7ffc/2)))
-#define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
-
+// call into bootloader jumptable at top of flash
 //#define flash_firmware (*((void(*)(const char* filename))(0x7ffc/2)))
-#define EEPROM_FILENAME_ADDR (E2END -1)
-
-//#define P(str) (strcpy_P(p_buffer, PSTR(str)), p_buffer)
+#define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
+#define flash_firmware (*((void(*)(void))(0x7ffc/2)))
+#define EEPROM_FILENAME_ADDR (E2END - 1)
 
 boolean sentData = false;
 boolean smsPower = false;       //  Manual XBee power flag
@@ -95,8 +91,7 @@ char method = 0;                //  Method of clock set, for debugging
 DateTime now;
 
 SoftwareSerial fonaSerial = SoftwareSerial (FONA_TX, FONA_RX);
-//Adafruit_FONA_ftp fona = Adafruit_FONA_ftp (FONA_RST);
-Adafruit_FONA fona = Adafruit_FONA (FONA_RST);
+Adafruit_FONA_ftp fona = Adafruit_FONA_ftp (FONA_RST);
 
 DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 Sleep sleep;        //  Create the sleep object
@@ -115,13 +110,13 @@ void setup (void)
 
 		Wire.begin(); //  Begin the I2C interface
 		RTC.begin();  //  Begin the RTC        
-//delay(2000);
+delay(2000);
 		Serial.begin (57600);
-		Serial.print (F("Tepmachcha v"));
+		Serial.print (F("Tepmachcha v. "));
 		Serial.print (VERSION);
-		Serial.print (' ');
+		Serial.print (F(" "));
 		Serial.print (__DATE__);      //  Compile data and time helps identify software uploads
-		Serial.print (' ');
+		Serial.print (F(" "));
 		Serial.println (__TIME__);
 
 		//analogReference (INTERNAL); // 1.1 on atmega328
@@ -149,7 +144,7 @@ void setup (void)
 		 */
 		while (readBattery() < 3500)   
 		{
-				Serial.println (F("Low power sleep.."));
+				Serial.println (F("Low power sleep"));
 				Serial.flush();
 				digitalWrite (BEEPIN, HIGH);      //  Make sure XBee is powered off
 				digitalWrite (RANGE, LOW);        //  Make sure sonar is off
@@ -164,21 +159,26 @@ void setup (void)
 		digitalWrite (RANGE, HIGH);          //  If set low, sonar will not range
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
 
-
-    /*
-    delay(5000);
-    writeEeprom();
-    flash_firmware();
-    while (1);
-    */
-
+      //SP=RAMEND;
+      //flash_firmware();
     // JACK
+    //asm("cli");
 		if (fonaOn() ) {
+      Serial.println(F("jack"));
+      delay(2000);
+
       int x = 3;
-      while( x-- ) if (getFirmware()) break;
+      while( x-- ) {
+        Serial.print(F("try "));
+        Serial.println(x);
+        if (getFirmware())
+          break;
+      }
       fonaOff();
     }
     //while (1);
+      Serial.println(F("end"));
+      delay(2000);
 
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		fonaOn();
@@ -219,7 +219,6 @@ void setup (void)
 
 void loop (void)
 {
-    //return;         // JACK
 
 		now = RTC.now();      //  Get the current time from the RTC
 
@@ -228,6 +227,7 @@ void loop (void)
 		Serial.println (now.minute());
 
 		int streamHeight = takeReading();
+    return;         // JACK
 
 		/*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
 	   *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
@@ -535,9 +535,9 @@ char fonaRead(void)
   uint32_t timeout = millis() + 1000;
 
   while(!fona.available()) {
-    //delay(1);
     if (millis() > timeout)
       break;
+    delay(1);
   }
   return fona.read();
 }
@@ -564,9 +564,6 @@ boolean fonaOn()
 		
 		fonaSerial.begin (4800);                      //  Open a serial interface to FONA
 
-        //fonaSerial.println(F("ATZ"));
-        //fonaSerial.println(F("ATQ0"));
-		
 		if (fona.begin (fonaSerial) == false)         //  Start the FONA on serial interface
 		{
 				Serial.println (F("FONA not found"));
@@ -649,6 +646,11 @@ boolean fonaOn()
 				return true;
 		}
 }
+
+
+void fonaGPRSOn(void) {
+}
+
 
 void fonaOff (void)
 {
@@ -1126,17 +1128,9 @@ void checkSMS (void)
  * VBAT is divided by a 10k/2k voltage divider to BATT so
  *   mV = BATT * (AREF * ((10+2)/2) / 1.023)
  * We use integer math to avoid including ~1.2K of FP/multiplication library
- *
  * AREF ADC->mV factor   approx integer fraction
- * ---- --------------   -----------------------
  * 1.1  6.4516129        1651/256 (~413/64)
  * 3.3  19.3548387       4955/256 (~155/8)
- *
- * If there were no requirement to display the voltage or compare it
- * to dynamic values, but only to test it against a fixed value,
- * we'd simplify by doing the conversion at compile time.
- * ie:
- *    if ( analogRead(A7) < 3500/19.3548 ) {...}
  */
 uint16_t readBattery(void) {
 
@@ -1145,8 +1139,6 @@ uint16_t readBattery(void) {
 
   adc = analogRead(BATT);
 
-  // We could just add 155 times, but it's quicker to add/substract
-  // powers of two which can be calculated just by shifting the bits
   // 155 = 128 + 32 - 4 - 1
   mV = adc * 128;
   mV += adc * 32;
@@ -1160,9 +1152,9 @@ uint16_t readBattery(void) {
 const uint8_t CHIP_SELECT = SS;  // SD chip select pin.
 SdCard card;
 Fat16 file;
-///char file_name[] = "FIRMWARE.HEX";
-char file_name[] = "BLINKY.BIN";
-//char file_name[] = "TEPTEST.BIN";
+const char file_name[] = "TEP.BIN";
+//const char file_name[] = "FIRMWARE.HEX";
+//const char file_name[] = "BLINK.HEX";
 
 boolean fat_init(void) {
 
@@ -1179,28 +1171,27 @@ boolean fat_init(void) {
 	  return false;
   }
 
-  file.open(file_name, O_CREAT | O_WRITE);
+  file.open(file_name, O_CREAT | O_WRITE | O_TRUNC);
+  Serial.print(F("file: "));
   Serial.println(file_name);
   return true;
 }
 
 
-/* Write firmware filename to EEPROM and toggle flash-from-SD flag
- *
- * The bootloader expects the filename to be in FAT16 direntry format, 
- * ie "FILENAMEEXT".  Shorter names are stored as "FILE____EXT" where
- * _ are spaces.
- * Additionally, the bootloader file is stored in reverse order.
- * Here we convert from "FILE.EXT" to "TXE____ELIF", and save to EEPROM.
- */
+// write firmware filename to EEPROM and toggle boot-from-SDcard flag at EEPROM[E2END]
 void writeEeprom(void)
 {
-  uint8_t i;
+  uint8_t x;
 
-  for (i = 9; i < 11; i++) {
-    EEPROM.update((EEPROM_FILENAME_ADDR - i), file_name[i]);
+    Serial.print('|');
+  for (x = 0; x < 12 && file_name[x] != 0; x++) {
+    Serial.print(file_name[x]);
+    Serial.print(',');
+    EEPROM.write( (EEPROM_FILENAME_ADDR - x), file_name[x] );
   }
-  EEPROM.update(E2END, 0); // 0 triggers an attempt to flash from SD card on power-on or reset
+    Serial.println('|');
+
+  EEPROM.write(E2END, 0); // 0 triggers an attempt to flash from SD card on power-on or reset
 }
 
 // serial flow control on
@@ -1275,7 +1266,7 @@ uint16_t readBuffer(char *buf, uint16_t len)
 
 
 
-#define READ_BUFFER_SIZE 256
+#define READ_BUFFER_SIZE 128
 boolean ftpCopyFile(uint16_t len)
 {
   uint32_t address = 0;
@@ -1284,9 +1275,6 @@ boolean ftpCopyFile(uint16_t len)
 char buf[READ_BUFFER_SIZE+1]; // extra needed only for println
   uint16_t size;
   uint16_t n;
-
-//address = 50236;
-//len += 50236;
 
   size = READ_BUFFER_SIZE;
 
@@ -1303,22 +1291,17 @@ char buf[READ_BUFFER_SIZE+1]; // extra needed only for println
 
 Serial.println(buf);
 
+    delay(50);
+    fona.read();
+    fona.read();
+
+    //fonaRead();
+    //fonaRead();
+    /*
     // fona returns \r\n from submitting command despite ATQ1
     if (fonaRead() != '\r') break;  // eat \r
     if (fonaRead() != '\n') break;  // eat \n
-
-    /*
-    while(!fona.available()); fona.read();
-    // eat \r
-    while(!fona.available()); fona.read();
-    */
-
-    /*
-    // eat \n
-    while(!fona.available()); if (fona.read() != '\r') break;
-    // eat \r
-    while(!fona.available()); if (fona.read() != '\n') break;
-    */
+      */
 
     n = readBuffer(buf, size);
 
@@ -1326,7 +1309,7 @@ Serial.println(buf);
       file.write(buf, n);
     } else {
 
-Serial.print("only: ");
+Serial.print(F("only: "));
 Serial.println(n);
 
       if (block_retries--) {
@@ -1336,22 +1319,25 @@ Serial.println(n);
       }
     }
 
-Serial.println("===============");
+Serial.print(F("wrote:"));
+Serial.println(n);
+Serial.println(F("==============="));
 
     // catch any stray OK responses etc
     fonaFlush();
 
-Serial.print(F("wrote:"));
-Serial.println(n);
-Serial.println("---------------");
+/*
+Serial.println(F("---------------"));
 buf[size+1] = 0;
 Serial.print(buf);
 Serial.println();
-Serial.println("---------------");
+Serial.println(F("---------------"));
+*/
+//Serial.print(F("."));
 
     address += size;
-    if (address + size > len)      // FIXME probably should by >= ??
-      size = len - address - 1;    // FIXME len-address, or len-address-1 ??
+    if (address + size > len)  // FIXME probably should by >= ??
+      size = len - address;    // FIXME len-address, or len-address-1 ??
   }
 
   //rewind
@@ -1385,14 +1371,11 @@ boolean ftpGet(void)
   fona.sendCheckReply (F("AT+FTPSERV=\"" FTPSERVER "\""), F("OK"));
   fona.sendCheckReply (F("AT+FTPUN=\"" FTPUSER "\""), F("OK"));
   fona.sendCheckReply (F("AT+FTPPW=\"" FTPPW "\""), F("OK"));
+
   // remote filename
-  //sprintf (buf, "AT+FTPGETNAME=\"%s\"", file_name);
-  sprintf (buf, "AT+FTPGETNAME=\"%s\"", "blink.hex");
-
-  //strcat_P(buf, PSTR("AT+FTPGETNAME="));
-  //strcat(buf, PSTR("blink.hex"));
-
+  sprintf (buf, "AT+FTPGETNAME=\"%s\"", file_name);
   fona.sendCheckReply (buf, F("OK"));
+
   // local file path on fona
   fona.sendCheckReply (F("AT+FSDEL=C:\\User\\ftp\\tmp.bin"), F("OK")); // delete previous download file
   fona.sendCheckReply (F("AT+FTPGETPATH=\"/home/ftpuser/files/\""), F("OK"));
@@ -1426,17 +1409,17 @@ boolean getFirmware()
   if ( !(fat_init() && file.isOpen()) ) {
     return false;
   }
+  Serial.println(F("here"));
+  delay(1000);
 
   if (fona.GPRSstate() != 1) {
-    return false;
+    Serial.println(F("no gprs"));
+    delay(1000);
+    //return false;
   }
 
-
-  //fona.sendCheckReply (F("AT"), F("OK"));    //  Query GSM location service for time
-
-  //fonaOn();
-
   Serial.println(F("Fetching firmware"));
+  delay(1000);
 
   //fona.sendCheckReply (F("AT+IFC=?"), F("OK"));
   //fona.sendCheckReply (F("AT+IFC=2,2"), F("OK"));     // set RTS
@@ -1450,24 +1433,26 @@ boolean getFirmware()
 
   if ( ftpGet() ) {
     ftpEnd();
-    //if (ftpCopyFile(2644)) {
-    if (ftpCopyFile(52880)) {
 
-      delay(5000);
+    if (ftpCopyFile(23258)) {
+    //if (ftpCopyFile(2325)) {
+    //if (ftpCopyFile(31000)) {
+
+      delay(1000);
       file.close();
-      delay(5000);
+
+      delay(1000);
       fonaOff();
+
+      Serial.println(F("updating eeprom...."));
+      delay(100);
       writeEeprom();
-      delay(1000);
-      Serial.println("reflashing....");
-      delay(1000);
+      Serial.println(F("reflashing...."));
+      delay(100);
 
       SP=RAMEND;
       flash_firmware();
 
-      // should never get here, reboot
-      WDTCSR = _BV(WDE);
-      while (1); // 16 ms
     }
   }
 
