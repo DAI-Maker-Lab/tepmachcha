@@ -21,9 +21,11 @@
 #define XBEEWINDOWSTART 14  //  Hour to turn on XBee for programming window
 #define XBEEWINDOWEND 17    //  Hour to turn off XBee
 #define INTERVAL 15         //  Number of minutes between readings
-#define BEEPASSWORD "XBEE_PASSWORD"  //  Password to turn on XBee by SMS
+
+// jack check if we can use PSTR() here.  also PROGMEM for red/yellowZones UUIDs
+#define BEEPASSWORD "XBEE_PASSWORD"          //  Password to turn on XBee by SMS
 #define CLEARYELLOW "CLEAR_YELLOW_PASSSWORD" //  Password to clear yellow alerts
-#define CLEARRED "CLEAR_RED_PASSWORD"        //  Password to clear red alerts
+#define CLEARRED    "CLEAR_RED_PASSWORD"     //  Password to clear red alerts
 
 
 /*   Tepmachcha is written to accommodate different alert levels for separate zones --
@@ -38,8 +40,18 @@
  */
 const int yellow[ZONES] = {550, 500};        //  Yellow alert level for Zones 0 & 1
 const int red[ZONES] = {600, 550};           //  Red alert level for Zones 0 & 1
-const char* yellowFlow[ZONES] = {"RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_0", "RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_1"};
-const char* redFlow[ZONES] = {"RAPIDPRO_REDALERT_FLOW_UUID_ZONE_0", "RAPIDPRO_REDALERT_FLOW_UUID_ZONE_1"};
+char* const yellowFlow[ZONES] PROGMEM = {
+  //"Y0",
+  //"Y1"
+  "RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_0",
+  "RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_1"
+};
+char* const redFlow[ZONES] PROGMEM = {
+  //"R0",
+  //"R1"
+  "RAPIDPRO_REDALERT_FLOW_UUID_ZONE_0",
+  "RAPIDPRO_REDALERT_FLOW_UUID_ZONE_1"
+};
 char alert[ZONES] = {'G', 'G'};              //  Green, yellow, or red alert state (G, Y, R)
 boolean sendYellow[ZONES] = {false, false};
 boolean sendRed[ZONES] = {false, false};
@@ -53,7 +65,9 @@ boolean sendRed[ZONES] = {false, false};
 //#include <I2C.h>             //  replacemnet I2C library
 #include <Fat16.h>            //  FAT16 library for SD card
 #include <EEPROM.h>           //  EEPROM lib
-#include "Adafruit_FONA_ftp.h"
+#include "Adafruit_FONA.h"
+
+#define SERIAL_BUFFER_SIZE 16 // hardware serial receive buffer
 
 #define RTCINT 0    //  RTC interrupt number
 
@@ -91,7 +105,7 @@ char method = 0;                //  Method of clock set, for debugging
 DateTime now;
 
 SoftwareSerial fonaSerial = SoftwareSerial (FONA_TX, FONA_RX);
-Adafruit_FONA_ftp fona = Adafruit_FONA_ftp (FONA_RST);
+Adafruit_FONA fona = Adafruit_FONA (FONA_RST);
 
 DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 Sleep sleep;        //  Create the sleep object
@@ -105,19 +119,15 @@ static void rtcIRQ (void)
 
 void setup (void)
 {
-		uint32_t mV = 0;
-		uint16_t adc = 0;
-
 		Wire.begin(); //  Begin the I2C interface
 		RTC.begin();  //  Begin the RTC        
 delay(2000);
 		Serial.begin (57600);
-		Serial.print (F("Tepmachcha v. "));
-		Serial.print (VERSION);
-		Serial.print (F(" "));
-		Serial.print (__DATE__);      //  Compile data and time helps identify software uploads
-		Serial.print (F(" "));
-		Serial.println (__TIME__);
+
+		Serial.print (F("Tepmachcha v"));
+		Serial.print (F(VERSION " "));   // Note: C compiler concatenates adjacent strings
+		Serial.print (F(__DATE__ " "));  // Compile-in date and time; helps identify software uploads
+		Serial.println (F(__TIME__));
 
 		//analogReference (INTERNAL); // 1.1 on atmega328
 		//analogReference(EXTERNAL);  // 3.3
@@ -227,7 +237,7 @@ void loop (void)
 		Serial.println (now.minute());
 
 		int streamHeight = takeReading();
-    return;         // JACK
+    //return;         // JACK
 
 		/*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
 	   *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
@@ -956,10 +966,11 @@ void checkSMS (void)
 {
 		//  Check SMS messages received for any valid commands
 		
-		char smsBuffer[255];
+		char smsBuffer[255];  //??
 		char smsSender[20];
-		unsigned int smsLen;
 		char smsMsg[57];
+
+		unsigned int smsLen;
 		boolean sendStatus = false;
 		int NumSMS;
 
@@ -1125,26 +1136,58 @@ void checkSMS (void)
 
 
 /* Get battery reading on ADC pin BATT, in mV
- * VBAT is divided by a 10k/2k voltage divider to BATT so
- *   mV = BATT * (AREF * ((10+2)/2) / 1.023)
+ *
+ * VBAT is divided by a 10k/2k voltage divider (ie /6) to BATT, which is then
+ * measured relative to AREF, on a scale of 0-1023, so
+ *
+ *   mV = BATT * (AREF * ( (10+2)/2 ) / 1.023)
+ *
  * We use integer math to avoid including ~1.2K of FP/multiplication library
  * AREF ADC->mV factor   approx integer fraction
- * 1.1  6.4516129        1651/256 (~413/64)
- * 3.3  19.3548387       4955/256 (~155/8)
+ * ---- --------------   -----------------------
+ * 1.1  6.4516           1651/256 (~103/16)
+ * 3.3  19.3548          4955/256 (~155/8)
+ *
+ * Note, if we ONLY needed to compare the ADC reading to a FIXED voltage,
+ * we'd simplify by letting the compiler calculate the equivalent 0-1023 value
+ * at compile time, and compare against that directly.
+ * eg to check voltage is < 3500:
+ *   if (analogueRead(BATT) < 3500/19.3548) {...}
+ *
+ * Also the calculations don't really need to be too accurate, because the
+ * ADC can be be quite innacurate (up to 10% with internal AREF!)
  */
 uint16_t readBattery(void) {
 
   uint16_t adc;
   uint32_t mV;
-
+  
   adc = analogRead(BATT);
+  //adc += analogRead(BATT);
+  //adc += analogRead(BATT);
+  //adc += analogRead(BATT);
 
+  // We could just add 155 times, but it's quicker to add/substract
+  // powers-of-two multiples of adc, which can be easily be calculated
+  // by shifting bits, eg shift <<2 bits for *4
+  // 155 = (4*32) + 32 - 4 - 1
   // 155 = 128 + 32 - 4 - 1
-  mV = adc * 128;
+  //mV = adc * 32;  // compiler smarts should convert * to equivalent <<
+  //mV += adc * 32;
+  mV += adc * 128;  // compiler smarts should convert * to equivalent <<
   mV += adc * 32;
   mV -= adc * 4;
   mV -= adc;
   return mV / 8;
+
+  /* values for 1.1v analogue reference AREF
+  // 103 = 64 + 32 + 8 - 1
+  mV = adc * 64;
+  mV += adc * 32;
+  mV += adc * 8;
+  mV -= adc;
+  return mV / 16;
+  */
 }
 
 
@@ -1183,13 +1226,13 @@ void writeEeprom(void)
 {
   uint8_t x;
 
-    Serial.print('|');
+    //Serial.print('|');
   for (x = 0; x < 12 && file_name[x] != 0; x++) {
-    Serial.print(file_name[x]);
-    Serial.print(',');
+    //Serial.print(file_name[x]);
+    //Serial.print(',');
     EEPROM.write( (EEPROM_FILENAME_ADDR - x), file_name[x] );
   }
-    Serial.println('|');
+    //Serial.println('|');
 
   EEPROM.write(E2END, 0); // 0 triggers an attempt to flash from SD card on power-on or reset
 }
@@ -1359,10 +1402,10 @@ boolean ftpGet(void)
   char buf[32];
   boolean success;
 
-  // ftp download to file supported and ready?
+  // FTP download to file supported and ready?
   if (!fona.sendCheckReply (F("AT+FTPGETTOFS?"), F("+FTPGETTOFS: 0"))) return false;
 
-  // configure ftp
+  // configure FTP
   fona.sendCheckReply (F("AT+SSLOPT=0,1"), F("OK")); // 0,x dont check cert, 1,x client auth
   fona.sendCheckReply (F("AT+FTPSSL=0"), F("OK"));   // 0 ftp, 1 implicit (port is an FTPS port), 2 explicit
   fona.sendCheckReply (F("AT+FTPCID=1"), F("OK"));
@@ -1373,6 +1416,9 @@ boolean ftpGet(void)
   fona.sendCheckReply (F("AT+FTPPW=\"" FTPPW "\""), F("OK"));
 
   // remote filename
+  //strcat_P(buf, F("AT+FTPGETNAME=\""));
+  //strcat(buf, file_name);
+  //strcat(buf, "\"");
   sprintf (buf, "AT+FTPGETNAME=\"%s\"", file_name);
   fona.sendCheckReply (buf, F("OK"));
 
