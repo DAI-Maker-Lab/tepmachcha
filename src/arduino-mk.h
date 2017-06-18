@@ -27,3 +27,6 @@ boolean getFirmware ();
 uint16_t readBattery(void);
 void writeEeprom(void);
 boolean fonaSendCheckOK(const __FlashStringHelper*);
+boolean ftpGet(void);
+void fonaPowerOn(void);
+boolean fonaSerialOn(void);

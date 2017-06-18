@@ -12,7 +12,7 @@ ARDUINO_LIBS = DS1337 Sleep_n0m1 Adafruit_FONA_Library SoftwareSerial Wire Fat16
 #-Wl,-Map,"{build.path}/{build.project_name}.map"
 
 ARDUINO_HEADER=arduino-mk.h		# include our own header, which includes Arduino.h, and function prototypes
-ARDUINO_DIR   = /Applications/Arduino2.app/Contents/Java
-ARDUINO_TOOLS_DIR = /Applications/Arduino181.app/Contents/Java/hardware/tools
+ARDUINO_DIR   = /Applications/Arduino.app/Contents/Java
+ARDUINO_TOOLS_DIR = /Applications/Arduino.app/Contents/Java/hardware/tools
 USER_LIB_PATH=/Users/jack/src/Arduino/Libraries/
 include ~/src/Arduino/arduino-mk/Arduino.mk
