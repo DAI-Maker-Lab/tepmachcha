@@ -40,18 +40,21 @@
  */
 const int yellow[ZONES] = {550, 500};        //  Yellow alert level for Zones 0 & 1
 const int red[ZONES] = {600, 550};           //  Red alert level for Zones 0 & 1
-char* const yellowFlow[ZONES] PROGMEM = {
+
+
+static char* const yellowFlow[ZONES] = {
   //"Y0",
   //"Y1"
   "RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_0",
   "RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_1"
 };
-char* const redFlow[ZONES] PROGMEM = {
+static char* const redFlow[ZONES] = {
   //"R0",
   //"R1"
   "RAPIDPRO_REDALERT_FLOW_UUID_ZONE_0",
   "RAPIDPRO_REDALERT_FLOW_UUID_ZONE_1"
 };
+
 char alert[ZONES] = {'G', 'G'};              //  Green, yellow, or red alert state (G, Y, R)
 boolean sendYellow[ZONES] = {false, false};
 boolean sendRed[ZONES] = {false, false};
@@ -88,8 +91,10 @@ boolean sendRed[ZONES] = {false, false};
 
 #define DOTIMES(x) for(uint16_t _i=x; _i;_i--)
 
-const char OK_STRING[] PROGMEM = "OK";
-__FlashStringHelper* OK = (__FlashStringHelper*)OK_STRING;
+static const char OK_STRING[] PROGMEM = "jk";
+//__FlashStringHelper* OK = (__FlashStringHelper*)OK_STRING;
+#define OK ((__FlashStringHelper*)OK_STRING)
+
 
 // call into bootloader jumptable at top of flash
 //#define flash_firmware (*((void(*)(const char* filename))(0x7ffc/2)))
@@ -171,6 +176,7 @@ delay(2000);
 
 		digitalWrite (RANGE, HIGH);          //  If set low, sonar will not range
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
+
     fonaPowerOn();
     fonaSerialOn();
     ftpGet();
@@ -429,8 +435,6 @@ void clockSet (void)
 		fonaFlush();    //  Flush any trailing data
 
 		fona.sendCheckReply (F("AT+CIPGSMLOC=2,1"), OK);    //  Query GSM location service for time
-		//fona.sendCheckOK (F("AT+CIPGSMLOC=2,1"));    //  Query GSM location service for time
-		//fonaSendCheckOK (F("AT+CIPGSMLOC=2,1"));    //  Query GSM location service for time
 		
 		fona.parseInt();                    //  Ignore first int
 		int secondInt = fona.parseInt();    //  Ignore second int -- necessary on some networks/towers
@@ -502,8 +506,19 @@ void clockSet (void)
 				}
 
 				Serial.print (F("Obtained current time: "));
-				// SPR sprintf (theDate, "%d/%d/%d %d:%d", netDay, netMonth, netYear, netHour, netMinute);
+        /*
+				sprintf (theDate, "%d/%d/%d %d:%d", netDay, netMonth, netYear, netHour, netMinute);
 				Serial.print (theDate);
+        */
+				Serial.print (netDay);
+        Serial.print ('/');
+				Serial.print (netMonth);
+        Serial.print ('/');
+				Serial.print (netYear);
+        Serial.print (' ');
+				Serial.print (netHour);
+        Serial.print (':');
+				Serial.println (netMinute);
 
 				Serial.println(F("Adjusting RTC"));
 				DateTime dt(netYear, netMonth, netDay, netHour, netMinute, netSecond, 0);
@@ -539,12 +554,6 @@ void fonaFlush (void)
 				Serial.print (c);
 		}
 }
-
-/*
-boolean fonaSendCheckOK(const __FlashStringHelper* cmd) {
-  return fona.sendCheckReply (cmd, ok_reply);
-}
-*/
 
 char fonaRead(void)
 {
@@ -855,20 +864,9 @@ boolean sendReading (int streamHeight)
 		}
 
 		//  Generate the HTTP GET URL for the Phant server 
-		sprintf (url, "data.sparkfun.com/input/%s?private_key=%s&1_streamheight=%d&2_charging=%d&3_voltage=%d", PUBLIC_KEY, PRIVATE_KEY, streamHeight, solar, voltage);
-
-		//strcat_P (url, (char *)F("data.sparkfun.com/input/"));
-    /*
-    PUBLIC_KEY,
-    ?private_key=
-    PRIVATE_KEY,
-    &1_streamheight=
-    streamHeight,
-    &2_charging=
-    solar,
-    &3_voltage=
-    voltage);
-    */
+    char format[160];
+		strcat_P(format, (char *)F("data.sparkfun.com/input/" PUBLIC_KEY "?private_key=" PRIVATE_KEY "&1_streamheight=%d&2_charging=%d&3_voltage=%d"));
+		sprintf (url, format, streamHeight, solar, voltage);
 
 		Serial.print (F("Sending: "));
 		Serial.println (url);
@@ -922,15 +920,7 @@ boolean ivr (const char* flow)
 		fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"push.ilhasoft.mobi/api/v1/runs.json\""), OK);
 		fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
 		fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
-		
-		fona.print (F("AT+HTTPPARA=\"USERDATA\",\"Authorization: Token "));
-		fona.print (APITOKEN);
-		fona.println (F("\""));
-		Serial.print (F("AT+HTTPPARA=\"USERDATA\",\"Authorization: Token "));
-		Serial.print (APITOKEN);
-		Serial.println (F("\""));
-		
-		fona.expectReply (OK);
+		fona.sendCheckReply( F("AT+HTTPPARA=\"USERDATA\",\"Authorization: Token " APITOKEN "\""), OK);
 
 		int dataSize = (strlen(flow) + strlen(TARGETCONTACT) + 32);
 
@@ -941,16 +931,12 @@ boolean ivr (const char* flow)
 		
 		fona.print (F("{\"flow_uuid\": \""));
 		fona.print (flow);
-		fona.print (F("\",\"contact\": \""));
-		fona.print (TARGETCONTACT);
-		fona.println (F("\"}"));
+		fona.println (F("\",\"contact\": \"" TARGETCONTACT "\""));
 		fona.expectReply (OK);
 
 		Serial.print (F("{\"flow_uuid\": \""));
 		Serial.print (flow);
-		Serial.print (F("\",\"contact\": \""));
-		Serial.print (TARGETCONTACT);
-		Serial.println (F("\"}"));
+		Serial.println (F("\",\"contact\": \"" TARGETCONTACT "\""));
 
 		uint16_t statusCode;
 		uint16_t dataLen;
@@ -1043,7 +1029,7 @@ void checkSMS (void)
 				Serial.println (smsBuffer);
 
 				//  Now check to see if any of the declared passwords are in the SMS message and respond accordingly
-				if (strcmp (smsBuffer, BEEPASSWORD) == 0)        //  If the message is the XBee password...
+				if (strcmp_P (smsBuffer, (const char *)F(BEEPASSWORD)) == 0)        //  If the message is the XBee password...
 				{
 				        //  ...determine the appropriate shutoff time and turn on the XBee until then
 				        
@@ -1060,32 +1046,30 @@ void checkSMS (void)
 				        
 				        digitalWrite (BEEPIN, LOW);        //  Turn on the XBee
 
-				        char leadingZero[3];
+                /*
+                char leadingZero[2];
 				        if (beeShutoffMinute < 10)         //  Add a leading zero to the minute if necessary
 				        {
-				                // SPR sprintf (leadingZero, ":0");
-				        }
-				        else
-				        {
-				                // SPR sprintf (leadingZero, ":");
+                        leadingZero[0] = '0';
 				        }
 
 				        //  Compose a reply to the sender confirming the action and giving the shutoff time
-				        // SPR sprintf (smsMsg, "XBee on until %d%s%d", beeShutoffHour, leadingZero, beeShutoffMinute);
-				        
+				        sprintf (smsMsg, "XBee on until %d:%s%d", beeShutoffHour, leadingZero, beeShutoffMinute);
+                */
+
+				        // Compose a reply to the sender confirming the action and giving the shutoff time
+		            strcat_P(smsBuffer, (const char *)F("XBee on until %d:%02d"));
+				        sprintf (smsMsg, smsBuffer, beeShutoffHour, beeShutoffMinute);
+
 				        Serial.println (F("XBee turned on by SMS."));
 				        smsPower = true;                    //  Raise the flag 
 				        fona.sendSMS(smsSender, smsMsg);    //  Tell the sender what you've done
 				}
 
-				int redComparator = strlen (CLEARRED);
 
-				if (strncmp (smsBuffer, CLEARRED, redComparator) == 0)    //  If the command is to clear red status...
+				if (strcmp_P (smsBuffer, (const char*)F(CLEARRED)) == 0)    //  If the command is to clear red status...
 				{
-				        int stringLength = strlen (smsBuffer);
-				        char* zoneNumber;
-				        strncpy (zoneNumber, smsBuffer + redComparator, (stringLength - redComparator));
-				        int zoneToClear = atoi (zoneNumber);
+				        int zoneToClear = atoi (&(smsBuffer[sizeof(CLEARRED)]));
 				        
 				        if (alert[zoneToClear] == 'R')     //  ...and the status is indeed red...
 				        {
@@ -1094,19 +1078,14 @@ void checkSMS (void)
 
 				        Serial.print (F("Clearing red alert, Zone "));
 				        Serial.print (zoneToClear);
-				        Serial.println (F("..."));
 
 				        sendStatus = true;
 				}
 
-				int yellowComparator = strlen (CLEARYELLOW);
 
-				if (strncmp (smsBuffer, CLEARYELLOW, yellowComparator) == 0)    //  If the command is to clear red status...
+				if (strcmp_P (smsBuffer, (const char*)F(CLEARYELLOW)) == 0)    //  If the command is to clear yellow status...
 				{
-				        int stringLength = strlen (smsBuffer);
-				        char* zoneNumber;
-				        strncpy (zoneNumber, smsBuffer + yellowComparator, (stringLength - yellowComparator));
-				        int zoneToClear = atoi (zoneNumber);
+				        int zoneToClear = atoi (&(smsBuffer[sizeof(CLEARYELLOW)]));
 				        
 				        if (alert[zoneToClear] == 'Y')
 				        {
@@ -1115,7 +1094,6 @@ void checkSMS (void)
 
 				        Serial.print (F("Clearing yellow alert, Zone "));
 				        Serial.print (zoneToClear);
-				        Serial.println (F("..."));
 
 				        sendStatus = true;
 				}
@@ -1144,15 +1122,18 @@ void checkSMS (void)
 				{
 				        switch (alert[i])
 				        {
-				                case 'G': break ; // SPR sprintf (alertStatus[i], "green");  break;
-				                case 'Y': break ; // SPR sprintf (alertStatus[i], "yellow"); break;
-				                case 'R': break ; // SPR sprintf (alertStatus[i], "red");    break;
-				                default: break ; // SPR sprintf (alertStatus[i], "unknown"); break;
+				                case 'G': break ; sprintf (alertStatus[i], "green");  break;
+				                case 'Y': break ; sprintf (alertStatus[i], "yellow"); break;
+				                case 'R': break ; sprintf (alertStatus[i], "red");    break;
+				                default: break ; sprintf (alertStatus[i], "unknown"); break;
 				        }
 
 				        int attempts = 0;
 
-				        printf (zoneMessage[i], "Zone %d: %s. ", i, alertStatus[i]);
+				        //printf (zoneMessage[i], "Zone %d: %s. ", i, alertStatus[i]);
+                char format[14];
+                strcat_P(format, (const char*)F("Zone %d: %s. "));
+				        printf (zoneMessage[i], format, i, alertStatus[i]);
 				        while (fona.sendSMS (smsSender, zoneMessage[i]) == false && attempts < 3)
 				        {
 				                attempts++;
@@ -1193,17 +1174,12 @@ uint16_t readBattery(void) {
   uint32_t mV;
   
   adc = analogRead(BATT);
-  adc += analogRead(BATT);
 
   // We could just add 155 times, but it's quicker to add/substract
   // powers-of-two multiples of adc, which can be easily be calculated
   // by shifting bits, eg shift <<2 bits for *4
-  // 155 = (2*64) + 32 - 4 - 1
   // 155 = 128 + 32 - 4 - 1
-  //mV = adc * 32;  // compiler smarts should convert * to equivalent <<
-  //mV += adc * 32;
-  //mV += adc * 128;  // compiler smarts should convert * to equivalent <<
-  mV = adc * 64;  // compiler smarts should convert * to equivalent <<
+  mV = adc * 128;  // compiler smarts should convert * to equivalent <<
   mV += adc * 32;
   mV -= adc * 4;
   mV -= adc;
@@ -1426,6 +1402,9 @@ void ftpEnd(void)
 }
 
 
+/*
+ * Fetch firmware from FTP server to FONA's internal filesystem
+ */
 boolean ftpGet(void)
 {
   char buf[32];
@@ -1492,8 +1471,6 @@ boolean ftpGet(void)
 
 boolean getFirmware()
 { 
-  //boolean success = false;
-
   if ( !(fat_init() && file.isOpen()) ) {
     return false;
   }
