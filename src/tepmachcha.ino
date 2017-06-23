@@ -3,9 +3,9 @@
 
 //  Customize these items for each installation
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-#define PUBLIC_KEY "YOUR_PUBLIC_KEY"      //  Public key for phant stream
-#define PRIVATE_KEY "YOUR_PRIVATE_KEY"    //  Private key for phant stream
-#define APITOKEN "YOUR_RAPIDPRO_API_TOKEN"  //  Rapidpro API token
+#define PUBLIC_KEY    "YOUR_PUBLIC_KEY"      //  Public key for phant stream
+#define PRIVATE_KEY   "YOUR_PRIVATE_KEY"    //  Private key for phant stream
+#define APITOKEN      "YOUR_RAPIDPRO_API_TOKEN"  //  Rapidpro API token
 #define TARGETCONTACT "TARGET_CONTACT_UUID" //  Rapidpro needs at least a dummy contact 
 
 #define FTPSERVER "YOUR FTP SERVER"
@@ -16,11 +16,11 @@
 #define FTPUSER   "ftpuser"
 #define FTPPW     "t0ult0mp0ng"
 				                            //  to start a flow
-#define SENSOR_HEIGHT 100   //  Height of top of octagonal gasket from streambed, in cm
-#define UTCOFFSET 0         //  Local standard time variance from UTC
+#define SENSOR_HEIGHT  100  //  Height of top of octagonal gasket from streambed, in cm
+#define UTCOFFSET        0  //  Local standard time variance from UTC
 #define XBEEWINDOWSTART 14  //  Hour to turn on XBee for programming window
-#define XBEEWINDOWEND 17    //  Hour to turn off XBee
-#define INTERVAL 15         //  Number of minutes between readings
+#define XBEEWINDOWEND   17  //  Hour to turn off XBee
+#define INTERVAL        15  //  Number of minutes between readings
 
 // jack check if we can use PSTR() here.  also PROGMEM for red/yellowZones UUIDs
 #define BEEPASSWORD "XBEE_PASSWORD"          //  Password to turn on XBee by SMS
@@ -129,22 +129,19 @@ void setup (void)
 {
 		Wire.begin(); //  Begin the I2C interface
 		RTC.begin();  //  Begin the RTC        
-delay(2000);
 		Serial.begin (57600);
 
-		Serial.print (F("Tepmachcha v"));
-		Serial.print (F(VERSION " "));   // Note: C compiler concatenates adjacent strings
-		Serial.print (F(__DATE__ " "));  // Compile-in date and time; helps identify software uploads
-		Serial.println (F(__TIME__));
+    // Compile-in the date and time; helps identify software uploads
+		// Note: C compiler concatenates adjacent strings
+		Serial.println (F("Tepmachcha v" VERSION " " __DATE__ " " __TIME__));
 
-		//analogReference (INTERNAL); // 1.1 on atmega328
-		//analogReference(EXTERNAL);  // 3.3
-		analogReference(DEFAULT);     // 3.3
-    // After change reference, first few readings are wrong
-		//DOTIMES(4) { adc = analogRead(BATT); delay(50); }
+    // after change reference, first couple readings can be wrong
+		analogReference(DEFAULT); // atmega328: DEFAULT=3.3V, INTERNAL=3.3V, EXTERNAL=3.3V
+		readBattery(); delay(100);
+    readBattery(); delay(100);
 
 		Serial.print (F("Battery: "));
-		Serial.print (readBattery());
+		Serial.print (readBattery);
 		Serial.println (F("mV"));
 
 		pinMode (BEEPIN, OUTPUT);
@@ -602,6 +599,9 @@ boolean fonaSerialOn(void)
 }
 
 
+void fonaGPRSOn(void) {
+}
+
 
 boolean fonaOn()
 {
@@ -683,9 +683,6 @@ boolean fonaOn()
 		}
 }
 
-
-void fonaGPRSOn(void) {
-}
 
 
 void fonaOff (void)
@@ -1166,7 +1163,7 @@ void checkSMS (void)
  *   if (analogueRead(BATT) < 3500/19.3548) {...}
  *
  * Also the calculations don't really need to be too accurate, because the
- * ADC can be be quite innacurate (up to 10% with internal AREF!)
+ * ADC itself can be be quite innacurate (up to 10% with internal AREF!)
  */
 uint16_t readBattery(void) {
 
@@ -1200,7 +1197,7 @@ uint16_t readBattery(void) {
 const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
 SdCard card;
 Fat16 file;
-const char file_name[] = "TEP.BIN";
+const char file_name[13] = "TEP.BIN";
 //const char file_name[] = "FIRMWARE.HEX";
 //const char file_name[] = "BLINK.HEX";
 
@@ -1214,7 +1211,7 @@ boolean fat_init(void) {
   
   // initialize a FAT16 volume
   if (!Fat16::init(&card)) {
-	  Serial.println(F("failed Fat16::init"));
+	  Serial.println(F("Fat16::init failed"));
 	  return false;
   }
 
@@ -1500,8 +1497,6 @@ boolean getFirmware()
     ftpEnd();
 
     if (ftpCopyFile(23258)) {
-    //if (ftpCopyFile(2325)) {
-    //if (ftpCopyFile(31000)) {
 
       delay(1000);
       file.close();
