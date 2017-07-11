@@ -3,10 +3,8 @@
 
 //  Customize these items for each installation
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-#define PUBLIC_KEY    "YOUR_PUBLIC_KEY"      //  Public key for phant stream
-#define PRIVATE_KEY   "YOUR_PRIVATE_KEY"    //  Private key for phant stream
-#define APITOKEN      "YOUR_RAPIDPRO_API_TOKEN"  //  Rapidpro API token
-#define TARGETCONTACT "TARGET_CONTACT_UUID" //  Rapidpro needs at least a dummy contact 
+#define TOKEN_ID      "EWS_TOKEN"
+#define DEVICE_ID     "EWS_DEVICE"
 
 #define FTPSERVER "YOUR FTP SERVER"
 #define FTPUSER   "YOUR FTP USER"
@@ -22,42 +20,9 @@
 #define XBEEWINDOWEND   17  //  Hour to turn off XBee
 #define INTERVAL        15  //  Number of minutes between readings
 
-// jack check if we can use PSTR() here.  also PROGMEM for red/yellowZones UUIDs
+// jack check if we can use PSTR() here
 #define BEEPASSWORD "XBEE_PASSWORD"          //  Password to turn on XBee by SMS
-#define CLEARYELLOW "CLEAR_YELLOW_PASSSWORD" //  Password to clear yellow alerts
-#define CLEARRED    "CLEAR_RED_PASSWORD"     //  Password to clear red alerts
 
-
-/*   Tepmachcha is written to accommodate different alert levels for separate zones --
- *   a low-lying zone in the region might need a lower yellow alert level than another
- *   zone. Note that using more than three zones will cause an overflow in the SMS
- *   reply function as currently written.
- */
-#define ZONES 2             //  Number of separate zones to be covered
-
-/*   If you do not define yellow, red, yellowFlow, redFlow and alert for all of your zones, 
- *   weird things will happen. Don't forget that zones will be numbered starting from zero.
- */
-const int yellow[ZONES] = {550, 500};        //  Yellow alert level for Zones 0 & 1
-const int red[ZONES] = {600, 550};           //  Red alert level for Zones 0 & 1
-
-
-static char* const yellowFlow[ZONES] = {
-  //"Y0",
-  //"Y1"
-  "RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_0",
-  "RAPIDPRO_YELLOWALERT_FLOW_UUID_ZONE_1"
-};
-static char* const redFlow[ZONES] = {
-  //"R0",
-  //"R1"
-  "RAPIDPRO_REDALERT_FLOW_UUID_ZONE_0",
-  "RAPIDPRO_REDALERT_FLOW_UUID_ZONE_1"
-};
-
-char alert[ZONES] = {'G', 'G'};              //  Green, yellow, or red alert state (G, Y, R)
-boolean sendYellow[ZONES] = {false, false};
-boolean sendRed[ZONES] = {false, false};
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
@@ -91,13 +56,11 @@ boolean sendRed[ZONES] = {false, false};
 
 #define DOTIMES(x) for(uint16_t _i=x; _i;_i--)
 
-static const char OK_STRING[] PROGMEM = "jk";
+static const char OK_STRING[] PROGMEM = "OK";
 //__FlashStringHelper* OK = (__FlashStringHelper*)OK_STRING;
 #define OK ((__FlashStringHelper*)OK_STRING)
 
-
 // call into bootloader jumptable at top of flash
-//#define flash_firmware (*((void(*)(const char* filename))(0x7ffc/2)))
 #define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
 #define flash_firmware (*((void(*)(void))(0x7ffc/2)))
 #define EEPROM_FILENAME_ADDR (E2END - 1)
@@ -141,7 +104,7 @@ void setup (void)
     readBattery(); delay(100);
 
 		Serial.print (F("Battery: "));
-		Serial.print (readBattery);
+		//Serial.print (readBattery);
 		Serial.println (F("mV"));
 
 		pinMode (BEEPIN, OUTPUT);
@@ -260,36 +223,6 @@ void loop (void)
 	   *	unit.
      */
 
-		//  Cycle through zones to check for new yellow alerts
-
-		for (int i = 0; i < ZONES; i++)
-		{
-				if (streamHeight >= yellow[i] && streamHeight < (SENSOR_HEIGHT - 55) && alert[i] == 'G')
-				{
-				        if (validate (yellow[i] == true))
-				        {
-				                sendYellow[i] = true;
-				                alert[i] = 'Y';
-				                upload (streamHeight);
-				        }
-				}
-		}
-
-		//  Do the same for red alerts
-
-		for (int i = 0; i < ZONES; i++)
-		{
-				if (streamHeight >= red[i] && streamHeight < (SENSOR_HEIGHT - 55) && alert[i] != 'R')
-				{
-				        if (validate (red[i] == true))
-				        {
-				                sendRed[i] = true;
-				                alert[i] = 'R';
-				                upload (streamHeight);
-				        }
-				}
-		}
-		
 		if (now.minute() % INTERVAL == 0 && sentData == false)   //  If it is time to send a scheduled reading...
 		{
 				upload (streamHeight);
@@ -354,44 +287,6 @@ void upload(int streamHeight)
 		fonaOn();
 		sendReading (streamHeight);
 
-		for (int i = 0; i < ZONES; i++)
-		{
-				if (sendYellow[i] == true)
-				{
-				        Serial.print (F("Triggering yellow alert for Zone "));
-				        Serial.println (i);
-				        if (ivr (yellowFlow[i]) == false) //  If it doesn't work...
-				        {
-				                Serial.println (F("Trigger failed. Retrying in 90s"));
-				                wait (90000);         //  ...wait 90 seconds...
-				                ivr (yellowFlow[i]);  //  ...and try again.
-				                /*   We could try repeatedly; the worry is that if
-				                 *   the trigger appeared to fail on our end but
-				                 *   the flow really was triggered, we could end
-				                 *   up sending many messages to subscribers. 
-				                 *   
-				                 *   Trying twice strikes a balance between making
-				                 *   sure the message went out and avoiding the
-				                 *   system being seen as a nuisance.
-				                 */
-				        }
-				        sendYellow[i] = false;
-				}
-
-				if (sendRed[i] == true)
-				{
-				        Serial.print (F("Triggering red alert for Zone "));
-				        Serial.println (i);
-				        if (ivr (redFlow[i]) == false)
-				        {
-				                Serial.println (F("Trigger failed. Retrying in 90s"));
-				                wait (90000);
-				                ivr (redFlow[i]);
-				        }
-				        sendRed[i] = false;
-				}
-		}
-		
 		if (noSMS == false)
 		{
 				checkSMS();
@@ -599,21 +494,12 @@ boolean fonaSerialOn(void)
 }
 
 
-void fonaGPRSOn(void) {
-}
-
-
-boolean fonaOn()
-{
-    fonaPowerOn();
-    if (fonaSerialOn()) {
-				Serial.print (F("FONA online. "));
-
+boolean fonaGSMOn(void) {
 				unsigned long gsmTimeout = millis() + 30000;
 				boolean gsmTimedOut = false;
 
 				Serial.print (F("Connecting GSM... "));
-				while (1)
+				while (true)
 				{
 				        byte network_status = fona.getNetworkStatus();
 				        if(network_status == 1 || network_status == 5) break;
@@ -623,8 +509,6 @@ boolean fonaOn()
 				                gsmTimedOut = true;
 				                break;
 				        }
-				        
-				        //wait (250);
 				        wait (500);
 				}
 
@@ -636,51 +520,67 @@ boolean fonaOn()
 				else
 				{
 				        Serial.println(F("done."));
+                return true;
 				}
 
-				//  RSSI is a measure of signal strength -- higher is better; less than 10 is worrying
-				byte rssi = fona.getRSSI();
-				Serial.print (F("RSSI: "));
-				Serial.println (rssi);
+}
 
-				wait (3000);    //  Give the network a moment
 
-				fona.setGPRSNetworkSettings (F("cellcard"));    //  Set APN to your local carrier
+void fonaGPRSOn(void) {
+}
 
-				if (rssi > 5)
-				{
-				        if (fona.enableGPRS (true) == false);
-				        {
-				              //  Sometimes enableGPRS() returns false even though it succeeded
-				              if (fona.GPRSstate() != 1)
-				              {
-				                      for (byte GPRSattempts = 0; GPRSattempts < 10; GPRSattempts++)
-				                      {
-				                            Serial.println (F("Trying again..."));
-				                            wait (2000);
-				                            fona.enableGPRS (true);
-				                            
-				                            if (fona.GPRSstate() == 1)
-				                            {
-				                                    Serial.println (F("GPRS is on."));
-				                                    break;
-				                            }
-				                            else
-				                            {
-				                                    Serial.print (F("Failed to turn GPRS on... "));
-				                            }
-				                      }
-				              }
-				        }
-				}
-				else
-				{
-				        Serial.println (F("Inadequate signal strength"));
-				        gsmTimedOut = true;
-				}
-				
-				return true;
-		}
+
+boolean fonaOn()
+{
+    fonaPowerOn();
+    if (fonaSerialOn()) {
+				Serial.print (F("FONA online. "));
+        if ( fonaGSMOn() ) {
+
+          //  RSSI is a measure of signal strength -- higher is better; less than 10 is worrying
+          byte rssi = fona.getRSSI();
+          Serial.print (F("RSSI: "));
+          Serial.println (rssi);
+
+          wait (3000);    //  Give the network a moment
+
+          fona.setGPRSNetworkSettings (F("cellcard"));    //  Set APN to your local carrier
+
+          if (rssi > 5)
+          {
+                  if (fona.enableGPRS (true) == false);
+                  {
+                        //  Sometimes enableGPRS() returns false even though it succeeded
+                        if (fona.GPRSstate() != 1)
+                        {
+                                for (byte GPRSattempts = 0; GPRSattempts < 10; GPRSattempts++)
+                                {
+                                      Serial.println (F("Trying again..."));
+                                      wait (2000);
+                                      fona.enableGPRS (true);
+                                      
+                                      if (fona.GPRSstate() == 1)
+                                      {
+                                              Serial.println (F("GPRS is on."));
+                                              break;
+                                      }
+                                      else
+                                      {
+                                              Serial.print (F("Failed to turn GPRS on... "));
+                                      }
+                                }
+                        }
+                  }
+          }
+          else
+          {
+                  Serial.println (F("Inadequate signal strength"));
+                  //gsmTimedOut = true;
+          }
+          
+          return true;
+      }
+    }
 }
 
 
@@ -822,157 +722,64 @@ int mode (int *x, int n)
 		}
 }
 
-
 boolean sendReading (int streamHeight)
 {
-		char url[160];
+        uint16_t statuscode = 0;
+        int16_t length = 0;
+        char data[255];
 
-		/*   A common error mode of the sonar is to return a stream height that is
-		 *   at the minimum (50cm) or maximum (10m) range of the sensor. Because we
-		 *   plan to trigger alerts from the cloud data in future, we will want to
-		 *   filter out those readings so they do not trigger an alert. The commented
-		 *   code below would do that -- the server would need to recognize 99999 as
-		 *   an error condition.
-		
-		if (streamHeight > (SENSOR_HEIGHT - 55))
-		{
-				streamHeight = 99999;
-		}
-		 */
-		
-		unsigned int voltage;
-		fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
+        unsigned int voltage;
+        fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
 
-		/*    We'll read the solar charging status so that we can diagnose any charging issues.
-		 *    This will only tell us if it's charging (1) or not (0), not the strength of the
-		 *    charge.
-		 *    
-		 *    In testing, this seemed to not always yield an accurate result; don't panic if
-		 *    you get a 0 result when it should be charging.
-		 */
-		int solar;
-		if (analogRead (6) <= 900 && analogRead (6) > 550)
-		{
-				solar = 1;
-		}
-		else
-		{
-				solar = 0;
-		}
+        int solar;
+        if (analogRead (6) <= 900 && analogRead (6) > 550)  //  Determine if panel is charging
+        {
+                solar = 1;
+        }
+        else
+        {
+                solar = 0;
+        }
 
-		//  Generate the HTTP GET URL for the Phant server 
-    char format[160];
-		strcat_P(format, (char *)F("data.sparkfun.com/input/" PUBLIC_KEY "?private_key=" PRIVATE_KEY "&1_streamheight=%d&2_charging=%d&3_voltage=%d"));
-		sprintf (url, format, streamHeight, solar, voltage);
+        //  Construct the body of the POST request:
+        sprintf (data, "api_token=%s&data={\"sensorId\":\"%s\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n", TOKEN_ID, DEVICE_ID, streamHeight, solar, voltage, now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
 
-		Serial.print (F("Sending: "));
-		Serial.println (url);
+        Serial.println (F("Sending data:"));
+        Serial.println (data);
 
-		unsigned int httpStatus;
-		unsigned int datalen;
+        //  ews1294.info does not currently support SSL; if it is added you will need to uncomment the following
+        //fona.sendCheckReply (F("AT+HTTPSSL=1"), F("OK"));   //  Turn on SSL
+        //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
 
-		boolean success = false;
-		int attempts = 0;
+        //  Send the POST request we have constructed
+        fona.HTTP_POST_start ("ews1294.info/api/v1/sensorapi", F("application/x-www-form-urlencoded"), (uint8_t *)data, strlen (data), &statuscode, (uint16_t *) &length);
+        fona.println (F("AT+HTTPREAD"));
+        
+        while (length > 0)
+        {
+                fonaFlush();
 
-		wait (7500);    //  Seems to greatly improve reliability on metfone and Cellcard
+                length--;
+                if (!length)
+                {
+                        break;
+                }
+        }
 
-		while (success == false && attempts < 5)   //  We'll attempt up to five times to upload data
-		{
-				fona.HTTP_GET_start (url, &httpStatus, &datalen);
-				fona.HTTP_GET_end();
-		
-				if (httpStatus == 200)    //  If the HTTP GET request returned a 200, it succeeded
-				{
-				        Serial.println (F("Uploaded"));
-				        success = true;
-				}
-				else
-				{
-				        Serial.println (F("Upload failed"));
-				        success = false;
-				}
+        if (statuscode == 200)
+        {
+                Serial.println (F("POST request succeeded."));
+                return true;
+        }
+        else
+        {
+                Serial.print (F("POST request appeared to fail. Status-code: "));
+                Serial.println (statuscode);
+                return false;
+        }
 
-				/*   Occasionally the FONA returns something other than a 200 even though the upload
-				 *   succeeded -- maybe that's coming from the server and maybe it isn't -- and so 
-				 *   you get a duplicate reading sent to Phant. It's not very common, but it does happen.
-				 */
-
-				attempts++;
-
-				wait (1000);
-		}
-
-		return success;
+        fona.HTTP_POST_end();
 }
-
-
-boolean ivr (const char* flow)
-{
-		Serial.print (F("Triggering flow with UUID "));
-		Serial.println (flow);
-		
-		//  Manually construct the HTTP POST headers necessary to trigger the RapidPro flow
-		fona.sendCheckReply (F("AT+HTTPINIT"), OK);
-		fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   //  RapidPro requires SSL
-		fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"push.ilhasoft.mobi/api/v1/runs.json\""), OK);
-		fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
-		fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
-		fona.sendCheckReply( F("AT+HTTPPARA=\"USERDATA\",\"Authorization: Token " APITOKEN "\""), OK);
-
-		int dataSize = (strlen(flow) + strlen(TARGETCONTACT) + 32);
-
-		fona.print (F("AT+HTTPDATA="));
-		fona.print (dataSize);
-		fona.println (F(",2000"));
-		fona.expectReply (OK);
-		
-		fona.print (F("{\"flow_uuid\": \""));
-		fona.print (flow);
-		fona.println (F("\",\"contact\": \"" TARGETCONTACT "\""));
-		fona.expectReply (OK);
-
-		Serial.print (F("{\"flow_uuid\": \""));
-		Serial.print (flow);
-		Serial.println (F("\",\"contact\": \"" TARGETCONTACT "\""));
-
-		uint16_t statusCode;
-		uint16_t dataLen;
-
-		fona.HTTP_action (1, &statusCode, &dataLen, 10000);   //  Send the POST request we've constructed
-
-		while (dataLen > 0)
-		{
-				while (fona.available())
-				{
-				        char c = fona.read();
-				        loop_until_bit_is_set (UCSR0A, UDRE0); 
-				        UDR0 = c;
-				}
-
-				dataLen--;
-				if (!dataLen)
-				{
-				        break;
-				}
-		}
-		
-		Serial.print (F("Status code: "));
-		Serial.println (statusCode);
-		Serial.print (F("Reply length: "));
-		Serial.println (dataLen);
-		
-		fona.HTTP_POST_end();
-
-		if (statusCode == 201)
-		{
-				return true;
-		}
-		else
-		{
-				return false;
-		}
-}
-
 
 
 void checkSMS (void)
@@ -1064,37 +871,6 @@ void checkSMS (void)
 				}
 
 
-				if (strcmp_P (smsBuffer, (const char*)F(CLEARRED)) == 0)    //  If the command is to clear red status...
-				{
-				        int zoneToClear = atoi (&(smsBuffer[sizeof(CLEARRED)]));
-				        
-				        if (alert[zoneToClear] == 'R')     //  ...and the status is indeed red...
-				        {
-				                alert[zoneToClear] = 'Y';  //  ...downgrade it to yellow.
-				        }
-
-				        Serial.print (F("Clearing red alert, Zone "));
-				        Serial.print (zoneToClear);
-
-				        sendStatus = true;
-				}
-
-
-				if (strcmp_P (smsBuffer, (const char*)F(CLEARYELLOW)) == 0)    //  If the command is to clear yellow status...
-				{
-				        int zoneToClear = atoi (&(smsBuffer[sizeof(CLEARYELLOW)]));
-				        
-				        if (alert[zoneToClear] == 'Y')
-				        {
-				                alert[zoneToClear] = 'G';  //  Downgrade it to green
-				        }
-
-				        Serial.print (F("Clearing yellow alert, Zone "));
-				        Serial.print (zoneToClear);
-
-				        sendStatus = true;
-				}
-			  
 				wait (1000);
 				fona.deleteSMS (NumSMS);
 				wait (1500);
@@ -1106,37 +882,6 @@ void checkSMS (void)
 				{
 				        fona.sendCheckReply (F("AT+CMGF=1"), OK);            //  Enter text mode
 				        fona.sendCheckReply (F("AT+CMGDA=\"DEL ALL\""), OK); //  Delete all SMS messages                }
-				}
-		}
-
-		//  If we have changed the alert status, send a confirmation SMS
-		if (sendStatus == true)
-		{
-				char alertStatus[6][ZONES];
-				char zoneMessage[13][ZONES];
-
-				for (int i = 0; i < ZONES; i++)
-				{
-				        switch (alert[i])
-				        {
-				                case 'G': break ; sprintf (alertStatus[i], "green");  break;
-				                case 'Y': break ; sprintf (alertStatus[i], "yellow"); break;
-				                case 'R': break ; sprintf (alertStatus[i], "red");    break;
-				                default: break ; sprintf (alertStatus[i], "unknown"); break;
-				        }
-
-				        int attempts = 0;
-
-				        //printf (zoneMessage[i], "Zone %d: %s. ", i, alertStatus[i]);
-                char format[14];
-                strcat_P(format, (const char*)F("Zone %d: %s. "));
-				        printf (zoneMessage[i], format, i, alertStatus[i]);
-				        while (fona.sendSMS (smsSender, zoneMessage[i]) == false && attempts < 3)
-				        {
-				                attempts++;
-				        }
-
-				        sendStatus = false;
 				}
 		}
 }
@@ -1343,7 +1088,7 @@ char buf[READ_BUFFER_SIZE+1]; // extra needed only for println
     //fonaRead();
     //fonaRead();
     /*
-    // fona returns \r\n from submitting command despite ATQ1
+    // Flushfona returns \r\n from submitting command despite ATQ1
     if (fonaRead() != '\r') break;  // eat \r
     if (fonaRead() != '\n') break;  // eat \n
       */
