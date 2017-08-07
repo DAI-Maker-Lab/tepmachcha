@@ -104,7 +104,7 @@ void setup (void)
     readBattery(); delay(100);
 
 		Serial.print (F("Battery: "));
-		//Serial.print (readBattery);
+		Serial.print (readBattery());
 		Serial.println (F("mV"));
 
 		pinMode (BEEPIN, OUTPUT);
@@ -137,8 +137,11 @@ void setup (void)
 		digitalWrite (RANGE, HIGH);          //  If set low, sonar will not range
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
 
-    fonaPowerOn();
-    fonaSerialOn();
+    //fonaPowerOn();
+    //fonaSerialOn();
+    //fonaGSMOn();
+    //fonaGPRSOn();
+    fonaOn();
     ftpGet();
     //return;
 
