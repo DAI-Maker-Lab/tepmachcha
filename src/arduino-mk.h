@@ -30,3 +30,7 @@ boolean fonaSendCheckOK(const __FlashStringHelper*);
 boolean ftpGet(void);
 void fonaPowerOn(void);
 boolean fonaSerialOn(void);
+void smsDeleteAll(void);
+void smsCheck (void);
+void test(void);
+boolean dmis (int);
