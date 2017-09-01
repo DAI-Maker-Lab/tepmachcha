@@ -34,3 +34,5 @@ void smsDeleteAll(void);
 void smsCheck (void);
 void test(void);
 boolean dmis (int);
+int freeRam(void);
+void ram(void);

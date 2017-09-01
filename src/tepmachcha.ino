@@ -1,27 +1,34 @@
 
-#define VERSION "1.03"      //  Version number
+#define VERSION "1.1"      //  Version number
 
 //  Customize these items for each installation
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 #define TOKEN_ID      "EWS_TOKEN"
 #define DEVICE_ID     "EWS_DEVICE"
+
+#define SENSOR_ID     "sensor id"
 #define APIBEARER     "YOUR_BEARER_ID"
 
-#define FTPSERVER "YOUR FTP SERVER"
-#define FTPUSER   "YOUR FTP USER"
-#define FTPPW     "YOUR FTP PASSWORD"
+#define FTPSERVER     "YOUR FTP SERVER"
+#define FTPUSER       "YOUR FTP USER"
+#define FTPPW         "YOUR FTP PASSWORD"
+#define BEEPASSWORD   "XBEE_PASSWORD"  // Password to turn on XBee by SMS
+#define FOTAPASSWORD  "FOTA_PASSWORD"  // Password to turn trigger FOTA update
+#define APN           "FONAapn"
+
+#define APN           "cellcard"
+#define APIBEARER     "TWpZLkRJYWpFZy5VeEZyTTBLOHRvOWttZTAzcVdjbmRpY2pHQTA="
+#define FTPSERVER     "hackerspacephnompenh.com"
+#define FTPUSER       "ftpuser"
+#define FTPPW         "t0ult0mp0ng"
+#define BEEPASSWORD   "XBEE_PASSWORD"  //  Password to turn on XBee by SMS
+#define FOTAPASSWORD  "FOTA_PASSWORD"  //  Password to turn trigger FOTA update
 
 #define SENSOR_HEIGHT  100  //  Height of top of octagonal gasket from streambed, in cm
 #define UTCOFFSET        0  //  Local standard time variance from UTC
 #define XBEEWINDOWSTART 14  //  Hour to turn on XBee for programming window
 #define XBEEWINDOWEND   17  //  Hour to turn off XBee
 #define INTERVAL        15  //  Number of minutes between readings
-
-// jack check if we can use PSTR() here
-#define BEEPASSWORD "XBEE_PASSWORD"          //  Password to turn on XBee by SMS
-#define FOTAPASSWORD "FOTA_PASSWORD"         //  Password to turn trigger FOTA update
-
-
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 #include <DS1337.h>           //  For the Stalker's real-time clock (RTC)
@@ -33,7 +40,10 @@
 #include <EEPROM.h>           //  EEPROM lib
 #include "Adafruit_FONA.h"
 
-#define SERIAL_BUFFER_SIZE 16 // hardware serial receive buffer
+// save RAM by reducing hw serial rcv buffer (default 64)
+// Note the XBee has a buffer of 100 bytes, but as we don't
+// receive much from XBee we can reduce the buffer.
+#define SERIAL_BUFFER_SIZE 16
 
 #define RTCINT 0    //  RTC interrupt number
 
@@ -87,9 +97,9 @@ static void rtcIRQ (void)
 
 void setup (void)
 {
-		Wire.begin(); // Begin I2C interface
-		RTC.begin();  // Begin RTC
-		Serial.begin (57600);
+		Wire.begin();         // Begin I2C interface
+		RTC.begin();          // Begin RTC
+		Serial.begin (57600); // Begin debug serial
 
     // Compile-in the date and time; helps identify software uploads
 		// Note: C compiler concatenates adjacent strings
@@ -107,6 +117,10 @@ void setup (void)
 		pinMode (FONA_KEY, OUTPUT);
 		pinMode (FONA_RX, OUTPUT);
 
+    // Set RTC interrupt handler
+		attachInterrupt (RTCINT, rtcIRQ, FALLING);
+		interrupts();
+
 
 		/*   If the voltage at startup is less than 3.5V, we assume the battery died in the field
 		 *   and the unit is attempting to restart after the panel charged the battery enough to
@@ -123,8 +137,8 @@ void setup (void)
 				digitalWrite (RANGE, LOW);        //  Make sure sonar is off
 				RTC.enableInterrupts (EveryHour); //  We'll wake up once an hour
 				RTC.clearINTStatus();             //  Clear any outstanding interrupts
-				attachInterrupt (RTCINT, rtcIRQ, FALLING);
-				interrupts();
+				//attachInterrupt (RTCINT, rtcIRQ, FALLING);
+				//interrupts();
 				sleep.pwrDownMode();                    //  Set sleep mode to Power Down
 				sleep.sleepInterrupt (RTCINT, FALLING); //  Sleep; wake on falling voltage on RTC pin
 		}
@@ -132,65 +146,31 @@ void setup (void)
 		digitalWrite (RANGE, HIGH);          //  If set low, sonar will not range
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
 
-// =============================================
-Serial.println(F("jack"));
-		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
-		RTC.clearINTStatus();                //  Clear any outstanding interrupts
-		attachInterrupt (RTCINT, rtcIRQ, FALLING);
-		interrupts();
-fonaPowerOn();
-fonaSerialOn();
-    fona.sendCheckReply(F("AT+CHFA=1"), OK);      // audio set prevent crash
-return;
+    fonaPowerOn();
+    fonaSerialOn();
 
-//fonaGSMOn();
-//fonaGPRSOn();
-fonaOn();
-ftpGet();
-//return;
+    // set ext. audio, to prevent crash on incoming calls
+    // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
+    //fona.sendCheckReply(F("AT+CHFA=1"), OK);
 
-  //SP=RAMEND;
-  //flash_firmware();
-// JACK
-//asm("cli");
-if (fonaOn() ) {
-  Serial.println(F("jack"));
-  delay(2000);
-
-  int x = 3;
-  while( x-- ) {
-    Serial.print(F("try "));
-    Serial.println(x);
-    if (getFirmware())
-      break;
-  }
-  fonaOff();
-}
-//while (1);
-  Serial.println(F("end"));
-  delay(2000);
-// =============================================
-
-
-
+    /*
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		fonaOn();
 		clockSet();
 		
 		// Delete any accumulated SMS messages to avoid interference from old commands
-    smsDeleteAll;
-    fona.sendCheckReply (F("AT+CHFA=1"), OK);            // set audio, prevents crash
+    smsDeleteAll();
+    fona.sendCheckReply (F("AT+CHFA=1"), OK);   // set audio, prevents crash?
 		
-		fonaOff();
-		
-		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
-		RTC.clearINTStatus();                //  Clear any outstanding interrupts
-		attachInterrupt (RTCINT, rtcIRQ, FALLING);
-		interrupts();
+    fonaOff();
+    */
 
 		now = RTC.now();    //  Get the current time from the RTC
+
+		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
+		RTC.clearINTStatus();                //  Clear any outstanding interrupts
 		
-		//  We'll keep the XBee on for an hour after startup to assist installation
+		// We'll keep the XBee on for an hour after startup to assist installation
 		if (now.hour() == 23)
 		{
 				beeShutoffHour = 0;
@@ -201,7 +181,7 @@ if (fonaOn() ) {
 		}
 		beeShutoffMinute = now.minute();
 
-		Serial.print (F("XBee powered until"));
+		Serial.print (F("XBee powered until "));
 		Serial.print (beeShutoffHour);
 		Serial.print (F(":"));
 		Serial.println (beeShutoffMinute);
@@ -291,13 +271,15 @@ return;
 		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
 		RTC.clearINTStatus();                   //  Clear any outstanding RTC interrupts
 		sleep.sleepInterrupt (RTCINT, FALLING); //  Sleep; wake on falling voltage on RTC pin
+
 }
 
 
 void upload(int streamHeight)
 {
 		fonaOn();
-		sendReading (streamHeight);
+		//sendReading (streamHeight);
+		dmis (streamHeight);
 
 		if (noSMS == false)
 		{
@@ -410,21 +392,10 @@ void clockSet (void)
 				}
 
 				Serial.print (F("Obtained current time: "));
-        /*
-				sprintf (theDate, "%d/%d/%d %d:%d", netDay, netMonth, netYear, netHour, netMinute);
+				sprintf_P(theDate, (prog_char*)F("%d/%d/%d %d:%d"), netDay, netMonth, netYear, netHour, netMinute);
 				Serial.print (theDate);
-        */
-				Serial.print (netDay);
-        Serial.print ('/');
-				Serial.print (netMonth);
-        Serial.print ('/');
-				Serial.print (netYear);
-        Serial.print (' ');
-				Serial.print (netHour);
-        Serial.print (':');
-				Serial.println (netMinute);
 
-				Serial.println(F("Adjusting RTC"));
+				Serial.println(F(". Adjusting RTC"));
 				DateTime dt(netYear, netMonth, netDay, netHour, netMinute, netSecond, 0);
         now = dt;
 				RTC.adjust(dt);     //  Adjust date-time as defined above
@@ -441,23 +412,23 @@ void clockSet (void)
 
 void wait (unsigned long period)
 {
-		//  Non-blocking delay function
-		unsigned long waitend = millis() + period;
-		while (millis() <= waitend)
-		{
-				Serial.flush();
-		}
+  // Non-blocking delay function
+  unsigned long waitend = millis() + period;
+  while (millis() <= waitend)
+  {
+    Serial.flush();
+  }
 }
 
 
 void fonaFlush (void)
 {
-    // Read all available serial input from FONA to flush any pending data.
-		while(fona.available())
-		{
-				char c = fona.read();
-				Serial.print (c);
-		}
+  // Read all available serial input from FONA to flush any pending data.
+  while(fona.available())
+  {
+    char c = fona.read();
+    Serial.print (c);
+  }
 }
 
 char fonaRead(void)
@@ -465,7 +436,8 @@ char fonaRead(void)
   // read from fona with timeout
   uint32_t timeout = millis() + 1000;
 
-  while(!fona.available()) {
+  while(!fona.available())
+  {
     if (millis() > timeout)
       break;
     delay(1);
@@ -476,18 +448,18 @@ char fonaRead(void)
 
 void fonaPowerOn(void)
 {
-  if (digitalRead (FONA_PS) == LOW)         //  If the FONA is off...
+  if (digitalRead (FONA_PS) == LOW)  //  If the FONA is off
   {
-      digitalWrite(FONA_KEY, HIGH);         //  KEY should be high to start
+    digitalWrite(FONA_KEY, HIGH);    //  KEY should be high to start
 
-      Serial.print (F("FONA poweron .. "));
-      while (digitalRead (FONA_PS) == LOW) 
-      {
-              digitalWrite(FONA_KEY, LOW);  //  ...pulse the Key pin low...
-              wait (500);
-      }
-      digitalWrite (FONA_KEY, HIGH);        //  ...and then return it to high
-      Serial.println(F(" done."));
+    Serial.print (F("FONA poweron .. "));
+    while (digitalRead (FONA_PS) == LOW) 
+    {
+      digitalWrite(FONA_KEY, LOW);   //  pulse the Key pin low
+      wait (500);
+    }
+    digitalWrite (FONA_KEY, HIGH);   //  and then return it to high
+    Serial.println(F(" done."));
   }
 }
 
@@ -500,131 +472,100 @@ boolean fonaSerialOn(void)
 
   if (fona.begin (fonaSerial) == false)         //  Start the FONA on serial interface
   {
-      Serial.println (F("FONA not found"));
-      return false;
+    Serial.println (F("FONA not found"));
+    return false;
   }
   return true;
 }
 
 
 boolean fonaGSMOn(void) {
-				unsigned long gsmTimeout = millis() + 30000;
-				boolean gsmTimedOut = false;
+  unsigned long gsmTimeout = millis() + 30000;
 
-				Serial.print (F("Connecting GSM... "));
-				while (true)
-				{
-				        byte network_status = fona.getNetworkStatus();
-				        if(network_status == 1 || network_status == 5) break;
-				        
-				        if(millis() >= gsmTimeout)
-				        {
-				                gsmTimedOut = true;
-				                break;
-				        }
-				        wait (500);
-				}
-
-				if(gsmTimedOut == true)
-				{
-				        Serial.println (F("timed out. Check SIM card, antenna, and signal."));
-				        return false;
-				}
-				else
-				{
-				        Serial.println(F("done."));
-                return true;
-				}
-
+  Serial.print (F("Connecting GSM... "));
+  while (millis() < gsmTimeout)
+  {
+    uint8_t status = fona.getNetworkStatus();
+    if (status == 1 || status == 5)
+    {
+      Serial.println(F("done."));
+      return true;
+    }
+    wait (500);
+  }
+  Serial.println (F("timed out. Check SIM card, antenna, and signal."));
+  return false;
 }
 
 
-void fonaGPRSOn(void) {
+boolean fonaGPRSOn(void) {
+  //  RSSI is a measure of signal strength -- higher is better; less than 10 is worrying
+  uint8_t rssi = fona.getRSSI();
+
+  Serial.print (F("RSSI: ")); Serial.println (rssi);
+
+  fona.setGPRSNetworkSettings (F(APN));    //  Set APN to your local carrier
+  wait (3000);    //  Give the network a moment
+
+  if (rssi > 5)
+  {
+    for (uint8_t attempt = 1; attempt < 10; attempt++)
+    {
+      Serial.print (F("Turning GPRS on, attempt ")); Serial.println(attempt);
+      fona.enableGPRS (true);
+
+      if (fona.GPRSstate() == 1) {
+        Serial.println (F("GPRS is on."));
+        return true;
+      }
+      Serial.println(F("Failed"));
+      wait (1000);
+    }
+  } else {
+    Serial.println (F("Inadequate signal strength"));
+  }
+  Serial.println(F("Giving up, GPRS Failed"));
+  return false;
 }
+
 
 void fonaGPRSOff(void) {
+  if (fona.enableGPRS (false) == false)
+  {
+    if (fona.GPRSstate() == 1)
+    {
+      Serial.println (F("GPRS Off Failed"));
+      return;
+    }
+  }
+  Serial.println (F("GPRS is off."));
 }
+
 
 boolean fonaOn()
 {
-    fonaPowerOn();
-    if (fonaSerialOn()) {
-				Serial.print (F("FONA online. "));
-        if ( fonaGSMOn() ) {
-
-          //  RSSI is a measure of signal strength -- higher is better; less than 10 is worrying
-          byte rssi = fona.getRSSI();
-          Serial.print (F("RSSI: "));
-          Serial.println (rssi);
-
-          wait (3000);    //  Give the network a moment
-
-          fona.setGPRSNetworkSettings (F("cellcard"));    //  Set APN to your local carrier
-
-          if (rssi > 5)
-          {
-                  if (fona.enableGPRS (true) == false);
-                  {
-                        //  Sometimes enableGPRS() returns false even though it succeeded
-                        if (fona.GPRSstate() != 1)
-                        {
-                                for (byte GPRSattempts = 0; GPRSattempts < 10; GPRSattempts++)
-                                {
-                                      Serial.println (F("Trying again..."));
-                                      wait (2000);
-                                      fona.enableGPRS (true);
-                                      
-                                      if (fona.GPRSstate() == 1)
-                                      {
-                                              Serial.println (F("GPRS is on."));
-                                              break;
-                                      }
-                                      else
-                                      {
-                                              Serial.print (F("Failed to turn GPRS on... "));
-                                      }
-                                }
-                        }
-                  }
-          }
-          else
-          {
-                  Serial.println (F("Inadequate signal strength"));
-                  //gsmTimedOut = true;
-          }
-          
-          return true;
-      }
+  fonaPowerOn();
+  if (fonaSerialOn()) {
+    Serial.print (F("FONA online. "));
+    if ( fonaGSMOn() ) {
+      return fonaGPRSOn();
     }
+  }
 }
-
 
 
 void fonaOff (void)
 {
-		wait (5000);        //  Shorter delays yield unpredictable results
-
-		//  We'll turn GPRS off first, just to have an orderly shutdown
-		if (fona.enableGPRS (false) == false)
-		{
-				if (fona.GPRSstate() == 1)
-				{
-				        Serial.println (F("Failed to turn GPRS off."));
-				}
-				else
-				{
-				        Serial.println (F("GPRS is off."));
-				}
-		}
-	  
-		wait (500);
-	  
-		// Power down the FONA if it needs it
-		if (digitalRead (FONA_PS) == HIGH)             //  If the FONA is on...
-		{
-				fona.sendCheckReply (F("AT+CPOWD=1"), OK); //  ...send shutdown command...
-				digitalWrite (FONA_KEY, HIGH);             //  ...and set Key high
-		}
+  wait (5000);        // Shorter delays yield unpredictable results
+  fonaGPRSOff();      // turn GPRS off first, for an orderly shutdown
+  
+  wait (500);
+  
+  if (digitalRead (FONA_PS) == HIGH)           //  If the FONA is on
+  {
+    fona.sendCheckReply (F("AT+CPOWD=1"), OK); //  send shutdown command
+    digitalWrite (FONA_KEY, HIGH);             //  and set Key high
+  }
 }
 
 
@@ -760,7 +701,7 @@ boolean sendReading (int streamHeight)
 
         int sol = solarCharging();
 
-        //  Construct the body of the POST request:
+        // Construct the body of the POST request:
         sprintf (data, "api_token=%s&data={\"sensorId\":\"%s\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n", TOKEN_ID, DEVICE_ID, streamHeight, sol, voltage, now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
 
         Serial.println (F("Sending data:"));
@@ -770,7 +711,7 @@ boolean sendReading (int streamHeight)
         //fona.sendCheckReply (F("AT+HTTPSSL=1"), F("OK"));   //  Turn on SSL
         //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
 
-        //  Send the POST request we have constructed
+        // Send the POST request we have constructed
         fona.HTTP_POST_start ("ews1294.info/api/v1/sensorapi", F("application/x-www-form-urlencoded"), (uint8_t *)data, strlen (data), &statuscode, (uint16_t *) &length);
         fona.println (F("AT+HTTPREAD"));
         
@@ -808,16 +749,17 @@ void smsDeleteAll(void)
 }
 
 
-uint8_t smsCount (void)
+uint16_t smsCount (void)
 {
 		/*   During testing on metfone, sometimes the FONA had to be on for more
 		 *   than 60 seconds(!) before it would receive a previously sent SMS message,
 		 *   so we'll keep looking for 60 seconds.
 		 */
 		uint32_t smsTimeout = millis() + 60000;
-    uint8_t NumSMS;
+    uint16_t NumSMS;
 
 		Serial.println (F("Checking for SMS messages..."));
+    ram();
 
 		do {
 				NumSMS = fona.getNumSMS();
@@ -831,16 +773,18 @@ uint8_t smsCount (void)
 
 #define SMS_MAX_LEN 160
 #define SMS_SENDER_MAX_LEN 20
-#define SMS_REPLY_LEN 60
+//#define SMS_REPLY_LEN 60
+#define FORMAT_LEN 24
 //  Check SMS messages received for any valid commands
 void smsCheck (void)
 {
 		char smsBuffer[SMS_MAX_LEN];  //??
 		char smsSender[SMS_SENDER_MAX_LEN];
-		char smsMsg[SMS_REPLY_LEN];
 		unsigned int smsLen;
 		boolean sendStatus = false;
-		uint8_t NumSMS;
+		uint16_t NumSMS;
+
+    ram();
 
 		fonaFlush();    //  Flush out any unresolved data
 		
@@ -861,12 +805,12 @@ void smsCheck (void)
 				Serial.println (smsBuffer);
 
 				//  Now check to see if any of the declared passwords are in the SMS message and respond accordingly
-				if (strcmp_P (smsBuffer, (const char *)F(FOTAPASSWORD)) == 0)        //  FOTA password...
+				if (strcmp_P (smsBuffer, (prog_char*)F(FOTAPASSWORD)) == 0)        //  FOTA password...
         {
             // read filename, size, cksum
         }
 
-				if (strcmp_P (smsBuffer, (const char *)F(BEEPASSWORD)) == 0)        //  XBee password...
+				if (strcmp_P (smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
 				{
 				        //  ...determine the appropriate shutoff time and turn on the XBee until then
                 beeShutoffHour = (now.hour() + 1);    //  We'll leave the XBee on for 1 hour
@@ -876,15 +820,13 @@ void smsCheck (void)
 				        digitalWrite (BEEPIN, LOW);        //  Turn on the XBee
 
 				        // Compose a reply to the sender confirming the action and giving the shutoff time
-		            strcat_P(smsBuffer, (const char *)F("XBee on until %d:%02d"));
-				        sprintf (smsMsg, smsBuffer, beeShutoffHour, beeShutoffMinute);
+				        sprintf_P(smsBuffer, (prog_char *)F("XBee on until %02d:%02d"), beeShutoffHour, beeShutoffMinute);
 
 				        smsPower = true;                    //  Raise the flag 
-				        fona.sendSMS(smsSender, smsMsg);    //  Tell the sender what you've done
+				        fona.sendSMS(smsSender, smsBuffer);    //  Tell the sender what you've done
 
 				        Serial.println (F("XBee turned on by SMS."));
 				}
-
 
 				wait (1000);
 				fona.deleteSMS (NumSMS);
@@ -895,11 +837,10 @@ void smsCheck (void)
 				//  the process takes too long we'll just nuke everything.
 				if (millis() >= timeOut)
 				{
-                smsDeleteAll;
+          smsDeleteAll();
 				}
 		}
 }
-
 
 
 /* Get battery reading on ADC pin BATT, in mV
@@ -1003,25 +944,106 @@ void xoff(void)
 }
 
 
+const static PROGMEM prog_uint32_t key[4] = {
+    //0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
+    0x01020304, 0x05060708, 0x090a0b0c, 0x0d0e0f00
+};
+
+/*
+const static uint32_t key[4] = {
+  0x01020304, 0x05060708, 0x090a0b0c, 0x0d0e0f00
+};
+*/
+// decrypt 8 bytes
+void xtea_decrypt(uint32_t v[2])
+{
+    uint8_t i;
+    uint32_t v0=v[0], v1=v[1], delta=0x9E3779B9, sum=delta * 32;
+
+    for (i=0; i < 32; i++)
+    {
+        v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + pgm_read_dword_near(&key[(sum>>11) & 3]));
+        //v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + key[(sum>>11) & 3]);
+        sum -= delta;
+        v0 -= (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + pgm_read_dword_near(&key[sum & 3]));
+        //v0 -= (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + key[sum & 3]);
+    }
+
+    v[0]=v0; v[1]=v1;
+}
+
+
+static uint32_t file_crc;
+const static PROGMEM prog_uint32_t crc_table[16] = {
+    0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
+    0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+    0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
+    0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
+};
+
+uint32_t crc_update(uint32_t crc, byte data)
+{
+    byte tbl_idx;
+    tbl_idx = crc ^ (data >> (0 * 4));
+    crc = pgm_read_dword_near(crc_table + (tbl_idx & 0x0f)) ^ (crc >> 4);
+    tbl_idx = crc ^ (data >> (1 * 4));
+    crc = pgm_read_dword_near(crc_table + (tbl_idx & 0x0f)) ^ (crc >> 4);
+    return crc;
+}
+
+uint32_t crc_string(char *s)
+{
+  uint32_t crc = ~0L;
+  while (*s)
+    crc = crc_update(crc, *s++);
+  crc = ~crc;
+  return crc;
+}
+
+
 // Read len bytes from fona serial and write to file buffer
-//uint16_t readBuffer(char *buf, uint16_t len)
-uint16_t readBuffer(uint16_t len)
+uint16_t readBlock(uint16_t len)
 {
   uint16_t n = 0;
+  uint32_t crc = file_crc;
   uint32_t timeout = millis() + 2000;
 
   xon();
   while (n < len && millis() < timeout) {
     if (fona.available()) {
-      if (!file.write(fona.read())) {
-        break;
-      }
+      //if (!file.write(fona.read())) break;
+      char c = fona.read();
+      crc = crc_update(crc, c);
+
+      if (!file.write(c)) break;
       n++;
     }
   }
   xoff();
 
+  if (n == len) file_crc = crc;
   return n;
+}
+
+
+
+uint16_t decryptBlock(uint16_t len)
+{
+  union {
+    char chr[8];
+    uint32_t x[2];
+  } buffer;
+
+  uint16_t n;
+  while (n < len) {
+    file.read(buffer.chr, 8);
+    xtea_decrypt(buffer.x);
+    for (uint8_t x = 0; x < 8; x++) {
+      file_crc = crc_update(file_crc, buffer.chr[x]);
+    }
+    file.write(buffer.chr, 8);
+    n += 8;
+  }
 }
 
 
@@ -1032,29 +1054,28 @@ boolean ftpCopyFile(uint16_t len)
   uint16_t n;
   uint8_t block_retries = 2;
 
-  // quiet mode - commands don't return status
-  fona.sendCheckReply (F("ATQ1"), F(""));
-  fonaFlush();
+  file_crc = ~0L;
 
-  while (address < len) {
+  // quiet mode - commands don't return status
+  fona.println(F("ATQ1"));
+
+  while (address < len) {    // FIXME need to add timeout otherwise could loop forever looking for \r, \n, complete blocks etc
+    fonaFlush();  // flush any notifications
+
+    file.seekSet(address);   // rewind to beginning of block
+    Serial.print(address); Serial.print(':');
+
     fonaSerial.print(F("AT+FSREAD=C:\\User\\ftp\\tmp.bin,1,"));
     fonaSerial.print(size);
     fonaSerial.print(',');
     fonaSerial.println(address);
 
-    Serial.print(address);
-    Serial.print(':');
-
-    delay(50);
-    fonaRead();
-    fonaRead();
-    /*
+    delay(120);
     // fona returns \r\n from submitting command despite ATQ1
-    if (fonaRead() != '\r') break;  // eat \r
-    if (fonaRead() != '\n') break;  // eat \n
-    */
+    if (fonaRead() != '\r') continue;  // start again if it's something else
+    if (fonaRead() != '\n') continue;
 
-    n = readBuffer(size);
+    n = readBlock(size);
     Serial.print(n);
 
     if (n == size && fona.expectReply(OK)) {
@@ -1064,20 +1085,17 @@ boolean ftpCopyFile(uint16_t len)
     } else {
       Serial.println();
       if (block_retries--) {
-        file.seekSet(address);   // rewind to beginning of block
         continue;
       } else {
         return false;
       }
     }
 
-    // catch any notifications
-    fonaFlush();
-
     address += size;
-    if (address + size > len)  // FIXME probably should by >= ??
-      size = len - address;    // FIXME len-address, or len-address-1 ??
+    if (address + size > len)  // CHECKME should by >= ??
+      size = len - address;    // CHECKME len-address, or len-address-1 ??
   }
+  file_crc = ~file_crc;
   return true;
 }
 
@@ -1105,8 +1123,6 @@ boolean ftpGet(void)
   fona.sendCheckReply (F("AT+FTPPW=\"" FTPPW "\""), OK);
 
   // remote filename
-  //fona.sendCheckReply (F("AT+FTPGETNAME=\""), (char *)file_name, OK, 2000);
-
   Serial.print(F("AT+FTPGETNAME=\""));
   Serial.print(file_name);
   Serial.println(F("\""));
@@ -1153,7 +1169,7 @@ boolean getFirmware(void)
     return false;
   }
 
-  Serial.println(F("Fetching firmware"));
+  Serial.println(F("Fetching FW"));
 
   if ( ftpGet() ) {
     ftpEnd();
@@ -1178,111 +1194,91 @@ boolean getFirmware(void)
 }
 
 
-
 boolean dmis (int streamHeight)
 {
-        //  Manually construct the HTTP POST headers
-        fona.sendCheckReply (F("AT+HTTPINIT"), F("OK"));
-        //fona.sendCheckReply (F("AT+HTTPSSL=1"), F("OK"));   // SSL required
-        fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river_guage\""), F("OK"));
-        //fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://www.hackerspacephnompenh.com/api/v1/data/river_guage\""), F("OK"));
-        fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));
-        fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), F("OK"));
-        
-
-        fona.sendCheckReply (F("AT+HTTPPARA=\"USERDATA\",\"data_source: test1\""), F("OK"));
-        //fona.sendCheckReply (F("AT+HTTPPARA=\"data_source: river_gauge\""), OK);
-        //fona.expectReply (F("OK"));
-
-
-        //Serial.print (F("AT+HTTPPARA=\"USERDATA\",\"Authorization: Bearer "));
-        //Serial.print (F("AT+HTTPPARA=\"Authorization: Bearer "));
-        //Serial.print (F(APIBEARER));
-        //Serial.println (F("\""));
-
-        fona.print (F("AT+HTTPPARA=\"USERDATA\",\"Authorization: Bearer "));
-        fona.print (F(APIBEARER));
-        fona.println (F("\""));
-        fona.expectReply (F("OK"));
-
-
-        char data[128];
-
-        //sprintf (data, "{\"sensorId\":\"%s\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000Z\"}", "test1", streamHeight, solarCharging(), readBattery(), now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
-        sprintf (data, "{\"sensorId\":\"%s\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000G\"}", "test1", streamHeight, solarCharging(), readBattery(), 2017, 8, 27, 13, 50, 0);
-
-        int dataSize = (strlen(data));
-
-        Serial.print(F("data size:"));
-        Serial.println(dataSize);
-
-        fona.print (F("AT+HTTPDATA="));
-        fona.print (dataSize);
-        fona.println (F(",2000"));
-        fona.expectReply (F("OK"));
-
-        /*
-        char ts[32];
-        sprintf (ts, "%d-%d-%dT%d:%d:%d.000Z", now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
-
-        fona.print (F("{\"sensorId\":\"")); fona.print("1");
-        fona.print (F("\",\"streamHeight\":\"")); fona.print(streamHeight);
-        fona.print (F("\",\"charging\":\"")); fona.print(solarCharging());
-        fona.print (F("\",\"voltage\":\"")); fona.print(readBattery());
-        fona.print (F("\",\"timestamp\":\"")); fona.print(ts);
-        fona.print (F("\"}\r\n"));
-        */
-
-        /*
-        F("{\"sensorId\":\"")
-        F("\",\"streamHeight\":\"")
-        F("\",\"charging\":\"")
-        F("\",\"voltage\":\"")
-        F("\",\"timestamp\":\"")
-        F("\"}\r\n")
-        */
-        fona.print(data);
-
-  delay(2000);
-        Serial.print(data);
-
-        //fona.expectReply (F("OK"));
-
         int statusCode;
         int dataLen;
 
+        // HTTP POST headers
+        fona.sendCheckReply (F("AT+HTTPINIT"), OK);
+        //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
+        fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
+        //fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://www.hackerspacephnompenh.com/api/v1/data/river_gauge\""), OK);
+        fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
+        fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
+        fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
+
+        // To add multiple user headers:
+        //   http://forum.sodaq.com/t/how-to-make-https-get-and-post/31/18
+        // Note the data_source must match the last element of the url, which must be a valid data_source
+        /*
+        fona.print (F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer "));
+        fona.print (F(APIBEARER));
+        fona.println (F("\""));
+        fona.expectReply (OK);
+        */
+        fona.sendCheckReply(F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer " APIBEARER "\""), OK);
+
+        char data[120];
+        ram();
+
+        sprintf_P(data,
+          (prog_char*)F("{\"sensorId\":\"" SENSOR_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000Z\"}"),
+            streamHeight,
+            solarCharging(),
+            readBattery(),
+            now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
+        int s = strlen(data);
+
+        Serial.print(F("data size:"));
+        Serial.println(s);
+        fona.print (F("AT+HTTPDATA="));
+        fona.print (s);
+        fona.println (F(",2000")); // timeout
+        fona.expectReply (OK);
+
+        Serial.print(data);
+        fona.print(data);
+
+        delay(100);
         fona.HTTP_action (1, &statusCode, &dataLen, 10000);   //  Send the POST request we've constructed
 
-        while (dataLen > 0)
-        {
-                fonaFlush();
-
-                dataLen--;
-                if (!dataLen)
-                {
-                        break;
-                }
-        }
-        
         Serial.print (F("Status code: "));
         Serial.println (statusCode);
         Serial.print (F("Reply length: "));
         Serial.println (dataLen);
+
+        if (dataLen > 0) {
+          fona.sendCheckReply (F("AT+HTTPREAD"),F("+HTTPREAD"));
+          while (dataLen-- >= 0)
+          {
+            Serial.write(fonaRead());
+          }
+        }
         
         fona.HTTP_POST_end();
 
         if (statusCode == 201)
         {
-                return true;
+          return true;
         }
         else
         {
-                return false;
+          return false;
         }
-
 }
 
 
+int freeRam (void) {
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
+
+void ram(void) {
+  Serial.print (F("Ram free: "));
+  Serial.println (freeRam());
+}
 
 void printMenu(void) {
   Serial.println(F("-------------------------------------"));
@@ -1290,17 +1286,22 @@ void printMenu(void) {
   Serial.println(F("[b] read the Battery"));
   Serial.println(F("[E] write EEPROM"));
   Serial.println(F("[e] read EEPROM"));
-  Serial.println(F("[O] FONA On"));
-  Serial.println(F("[o] FONA Off"));
+  Serial.println(F("[.oO] FONA off/serial-on/full-on"));
   Serial.println(F("[G] Enable GPRS"));
   Serial.println(F("[r] re-boot-flash"));
   Serial.println(F("[f] ftpGet"));
   Serial.println(F("[c] ftp copy file from fona to SD card"));
-  Serial.println(F("[C] clockSet"));
+  Serial.println(F("[T] Time - clockSet"));
+  Serial.println(F("[N] Now get time from RTC"));
   Serial.println(F("[d] dmis"));
   Serial.println(F("[v] read sd file"));
   Serial.println(F("[i] FS info"));
   Serial.println(F("[t] take reading"));
+  Serial.println(F("[#] smsCount"));
+  Serial.println(F("[s] sms check"));
+  Serial.println(F("[C] CRC test"));
+  Serial.println(F("[L] A-GPS Location"));
+  Serial.println(F("[:] Passthru command"));
 }
 
 
@@ -1327,10 +1328,15 @@ void test(void)
       break;
     }
     case 'O': {
-      fonaOn();
+      if (fonaSerial && fona.sendCheckReply(F("AT"), OK)) {
+        if ( fonaGSMOn() ) {
+          fonaGPRSOn();
+        }
+      } else
+        fonaOn();
       break;
     }
-    case 'o': {
+    case '.': {
       fonaOff();
       break;
     }
@@ -1338,7 +1344,7 @@ void test(void)
       ftpGet();
       break;
     }
-    case 'C': {
+    case 'T': {
       clockSet();
       break;
     }
@@ -1346,15 +1352,21 @@ void test(void)
       if ( !(fat_init() && fileOpen()) ) {
         break;
       }
-      ftpCopyFile(23258);
+      boolean s = ftpCopyFile(23258);
       file.close();
+      Serial.print(F("return: "));
+      Serial.println(s);
+      Serial.print(F("CRC: "));
+      Serial.println(file_crc);
+      Serial.print(F("CRC: "));
+      Serial.println(file_crc, HEX);
       break;
     }
     case 'd': {
       dmis(55);
       break;
     }
-    case 's': {
+    case 'o': {
       fonaPowerOn();
       fonaSerialOn();
       break;
@@ -1381,16 +1393,18 @@ void test(void)
       break;
     }
     case ':': {
+      Serial.println();
+      uint8_t i;
+      char buf[32];
       char c;
       while(c != '\r') {
         if (Serial.available()) {
           c = Serial.read();
-          //Serial.write(c);
-          fona.write(c);
+          buf[i++] = c;
         }
       }
-      fona.write('\r');
-      fona.write('\n');
+      buf[i] = 0;
+      fona.println(buf);
       delay(500);
       break;
     }
@@ -1406,12 +1420,29 @@ void test(void)
       takeReading();
       break;
     }
+    case 'G': {
+      fonaGPRSOn();
+      break;
+    }
+    case 'N': {
+		  now = RTC.now();    //  Get the current time from the RTC
+      Serial.print(now.year());
+      Serial.print(':');
+      Serial.print(now.month());
+      Serial.print(':');
+      Serial.print(now.date());
+      Serial.print('T');
+      Serial.print(now.hour());
+      Serial.print(':');
+      Serial.println(now.minute());
+      break;
+    }
     case 'v': {
       fat_init();
       file.open(file_name, O_READ);
       file.rewind();
       if (file.isOpen())
-          Serial.println("open");
+        Serial.println(F("open"));
       char c;
       for(int i = 0; i < 1024; i++) {
         c = file.read();
@@ -1424,6 +1455,51 @@ void test(void)
            Serial.println('|');
         }
       }
+      break;
+    }
+    case 'D': {
+      smsDeleteAll();
+      break;
+    }
+    case '#': {
+       smsCount();
+       break;
+    }
+    case 's': {
+       smsCheck();
+       break;
+    }
+    case 'M': {
+      ram();
+      break;
+    }
+    case 'C':{
+      union xtea_block_t {
+        char chr[8];
+        uint32_t x[2];
+      };
+
+      xtea_block_t buffer;
+      
+      buffer.x[0] = 0xc44106f9;
+      buffer.x[1] = 0xde62a5c5;
+      xtea_decrypt(buffer.x);
+      Serial.println(buffer.chr);
+      Serial.print(buffer.x[0], HEX);
+      Serial.print(",");
+      Serial.println(buffer.x[1], HEX);
+      Serial.print(F("HELLO: "));
+      Serial.println(crc_string("HELLO"), HEX);
+      break;
+    }
+    case 'L': {
+		  //fona.sendCheckReply (F("AT+CIPGSMLOC=1,1"), OK); //  Query GSM location service for lat/long/time
+		  fona.sendCheckReply (F("AT+CIPGSMLOC=1,1"), F("+CIPGSMLOC: 0,")); //  Query GSM location service for lat/long/time
+      break;
+    }
+    case 'u': {
+      upload(100);
+      break;
     }
   }
   fonaFlush();
