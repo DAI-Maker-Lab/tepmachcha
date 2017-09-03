@@ -754,9 +754,9 @@ uint16_t smsCount (void)
 		 */
 		uint32_t smsTimeout = millis() + 60000;
     uint16_t NumSMS;
+    DEBUG_RAM
 
 		Serial.println (F("Checking for SMS messages..."));
-    ram();
 
 		do {
 				NumSMS = fona.getNumSMS();
@@ -778,8 +778,7 @@ void smsCheck (void)
 		unsigned int smsLen;
 		boolean sendStatus = false;
 		uint16_t NumSMS;
-
-    ram();
+    DEBUG_RAM
 
 		fonaFlush();    //  Flush out any unresolved data
 		
@@ -976,10 +975,8 @@ void xtea(uint32_t v[2])
     for (i=0; i < 32; i++)
     {
         v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + pgm_read_dword_near(&key[(sum>>11) & 3]));
-        //v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + key[(sum>>11) & 3]);
         sum -= delta;
         v0 -= (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + pgm_read_dword_near(&key[sum & 3]));
-        //v0 -= (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + key[sum & 3]);
     }
     v[0]=v0; v[1]=v1;
 }
@@ -1013,23 +1010,6 @@ void xtea(uint32_t v[2])
 */
 
 
-const static PROGMEM prog_uint32_t crc_table[16] = {
-    0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
-    0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
-    0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
-    0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
-};
-uint32_t crc_update(uint32_t crc, byte data)
-{
-    byte tbl_idx;
-    tbl_idx = crc ^ (data >> (0 * 4));
-    crc = pgm_read_dword_near(&crc_table[tbl_idx & 0x0f]) ^ (crc >> 4);
-    tbl_idx = crc ^ (data >> (1 * 4));
-    crc = pgm_read_dword_near(&crc_table[tbl_idx & 0x0f]) ^ (crc >> 4);
-    return crc;
-}
-
-
 boolean fileDecrypt() {
   byte c;
   uint8_t i;
@@ -1048,6 +1028,23 @@ boolean fileDecrypt() {
         xtea(x.v);
       }
       crc = crc_update(crc, c);
+}
+
+
+const static PROGMEM prog_uint32_t crc_table[16] = {
+    0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
+    0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+    0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
+    0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
+};
+uint32_t crc_update(uint32_t crc, byte data)
+{
+    byte tbl_idx;
+    tbl_idx = crc ^ (data >> (0 * 4));
+    crc = pgm_read_dword_near(&crc_table[tbl_idx & 0x0f]) ^ (crc >> 4);
+    tbl_idx = crc ^ (data >> (1 * 4));
+    crc = pgm_read_dword_near(&crc_table[tbl_idx & 0x0f]) ^ (crc >> 4);
+    return crc;
 }
 
 
@@ -1071,10 +1068,11 @@ uint16_t fonaReadBlock(uint16_t len)
 
 
 #define BLOCK_ATTEMPTS 3
+#define BLOCK_SIZE 512
 boolean fonaFileCopy(uint16_t len)
 {
   uint32_t address = 0;
-  uint16_t size = 512;
+  uint16_t size = BLOCK_SIZE;
   uint16_t n;
   uint8_t retry_attempts = BLOCK_ATTEMPTS;
 
@@ -1190,7 +1188,12 @@ boolean getFirmware(void)
   if ( ftpGet() ) {
     ftpEnd();
 
-    if (fonaFileCopy(SIZE)) {
+    int i = 3;
+    while (i) {
+      if (fonaFileCopy(SIZE)) break;
+      i--;
+    }
+    if (i) {
       file.close();
       fonaOff();
 
@@ -1217,8 +1220,7 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
     int statusCode;
     int dataLen;
     char data[128];
-
-    ram();
+    DEBUG_RAM
 
     // HTTP POST headers
     fona.sendCheckReply (F("AT+HTTPINIT"), OK);
@@ -1228,9 +1230,10 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
     fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
 
+    // Note the data_source should match the last element of the url,
+    // which must be a valid data_source
     // To add multiple user headers:
     //   http://forum.sodaq.com/t/how-to-make-https-get-and-post/31/18
-    // Note the data_source must match the last element of the url, which must be a valid data_source
     fona.sendCheckReply (F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer " APIBEARER "\""), OK);
 
     // json data
@@ -1269,7 +1272,7 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 
     fona.HTTP_POST_end();
 
-
+    if (statusCode == 201) {
       return true;
     } else {
       return false;
