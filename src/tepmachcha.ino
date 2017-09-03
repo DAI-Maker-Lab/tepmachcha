@@ -497,12 +497,12 @@ boolean fonaGPRSOn(void) {
 
   Serial.print (F("RSSI: ")); Serial.println (rssi);
 
-  fona.setGPRSNetworkSettings (F(APN));    //  Set APN to your local carrier
+  fona.setGPRSNetworkSettings (F(APN));  //  Set APN to local carrier
   wait (3000);    //  Give the network a moment
 
   if (rssi > 5)
   {
-    for (uint8_t attempt = 1; attempt < 10; attempt++)
+    for (uint8_t attempt = 1; attempt < 5; attempt++)
     {
       Serial.print (F("Turning GPRS on, attempt ")); Serial.println(attempt);
       fona.enableGPRS (true);
