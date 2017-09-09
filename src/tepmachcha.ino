@@ -65,7 +65,8 @@ static const char OK_STRING[] PROGMEM = "OK";
 
 // call into bootloader jumptable at top of flash
 #define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
-#define flash_firmware (*((void(*)(void))(0x7ffc/2)))
+//#define flash_firmware (*((void(*)(void))(0x7ffc/2)))
+#define flash_firmware (*((void(*)(const char *))(0x7ffc/2)))
 #define EEPROM_FILENAME_ADDR (E2END - 1)
 
 boolean sentData = false;
@@ -512,7 +513,7 @@ boolean fonaGPRSOn(void) {
         return true;
       }
       Serial.println(F("Failed"));
-      wait (1000);
+      wait (2000);
     }
   } else {
     Serial.println (F("Inadequate signal strength"));
@@ -746,14 +747,15 @@ void smsDeleteAll(void)
 }
 
 
-uint16_t smsCount (void)
+// returns -1 for error
+int8_t smsCount (void)
 {
 		/*   During testing on metfone, sometimes the FONA had to be on for more
 		 *   than 60 seconds(!) before it would receive a previously sent SMS message,
 		 *   so we'll keep looking for 60 seconds.
 		 */
 		uint32_t smsTimeout = millis() + 60000;
-    uint16_t NumSMS;
+    int8_t NumSMS; // fona.getNumSMS returns -1 on failure
     DEBUG_RAM
 
 		Serial.println (F("Checking for SMS messages..."));
@@ -768,29 +770,30 @@ uint16_t smsCount (void)
     return NumSMS;
 }
 
+
 #define SMS_MAX_LEN 160
 #define SMS_SENDER_MAX_LEN 20
 //  Check SMS messages received for any valid commands
 void smsCheck (void)
 {
-		char smsBuffer[SMS_MAX_LEN];  //??
+		char smsBuffer[SMS_MAX_LEN];
 		char smsSender[SMS_SENDER_MAX_LEN];
 		unsigned int smsLen;
 		boolean sendStatus = false;
-		uint16_t NumSMS;
+		int8_t NumSMS;
+		uint32_t timeOut = (millis() + 60000);
     DEBUG_RAM
 
 		fonaFlush();    //  Flush out any unresolved data
 		
     NumSMS =  smsCount();
 
-		unsigned long timeOut = (millis() + 60000);
 		while (NumSMS > 0)          //  If there are messages...
 		{
-				fona.readSMS (NumSMS, smsBuffer, SMS_MAX_LEN, &smsLen);  //  ...retrieve the last one...
-				wait (500);                                              //  ...give FONA a moment to catch up...
+				fona.readSMS (NumSMS, smsBuffer, SMS_MAX_LEN, &smsLen);  // retrieve the most recent one
+				wait (500);                                              // required delay
 
-				fona.getSMSSender (NumSMS, smsSender, SMS_SENDER_MAX_LEN);   //  ...find out who send it...
+				fona.getSMSSender (NumSMS, smsSender, SMS_SENDER_MAX_LEN);  // get sender
 				wait (500);
 
 				Serial.print (F("Message from "));
@@ -803,24 +806,31 @@ void smsCheck (void)
         {
             //xtea((uint32_t *)smsBuffer);
             // read filename, size, cksum
+            Serial.println(F("JACK SAYS: Rosebud"));
+            fonaOn();
+            file_size = SIZE;
+            file_name = "CARD.BIN";
+            getFirmware();
+            fonaPowerOn();
+				    fona.deleteSMS (NumSMS);
         }
 
 				if (strcmp_P (smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
 				{
-				        //  ...determine the appropriate shutoff time and turn on the XBee until then
-                beeShutoffHour = (now.hour() + 1);    //  We'll leave the XBee on for 1 hour
-                if (beeShutoffHour == 24)
-                  beeShutoffHour = 0;
-				        
-				        digitalWrite (BEEPIN, LOW);        //  Turn on the XBee
+            //  ...determine the appropriate shutoff time and turn on the XBee until then
+            beeShutoffHour = (now.hour() + 1);    //  We'll leave the XBee on for 1 hour
+            if (beeShutoffHour == 24)
+            beeShutoffHour = 0;
+            
+            digitalWrite (BEEPIN, LOW);        //  Turn on the XBee
 
-				        // Compose a reply to the sender confirming the action and giving the shutoff time
-				        sprintf_P(smsBuffer, (prog_char *)F("XBee on until %02d:%02d"), beeShutoffHour, beeShutoffMinute);
+            // Compose a reply to the sender confirming the action and giving the shutoff time
+            sprintf_P(smsBuffer, (prog_char *)F("XBee on until %02d:%02d"), beeShutoffHour, beeShutoffMinute);
 
-				        smsPower = true;                    //  Raise the flag 
-				        fona.sendSMS(smsSender, smsBuffer);    //  Tell the sender what you've done
+            smsPower = true;                    //  Raise the flag 
+            fona.sendSMS(smsSender, smsBuffer);    //  Tell the sender what you've done
 
-				        Serial.println (F("XBee turned on by SMS."));
+            Serial.println (F("XBee turned on by SMS."));
 				}
 
 				wait (1000);
@@ -828,8 +838,10 @@ void smsCheck (void)
 				wait (1500);
 				NumSMS = fona.getNumSMS();
 
-				//  Occasionally messages won't delete and this loops forever. If
-				//  the process takes too long we'll just nuke everything.
+        Serial.print(F("# SMS: ")); Serial.println(NumSMS);
+
+				// Occasionally messages won't delete and this loops forever. If
+				// the process takes too long we'll just nuke everything.
 				if (millis() >= timeOut)
 				{
           smsDeleteAll();
@@ -849,7 +861,7 @@ void smsCheck (void)
  * AREF ADC->mV factor   approx integer fraction
  * ---- --------------   -----------------------
  * 1.1      6.45          1651/256 (~103/16)   (103 = 64 + 32 + 8 - 1)
- * 3.3     19.35          4955/256 (~155/8)
+ * 3.3     19.35          4955/256 (~155/8)    (155 = 128 + 32 - 4 - 1)
  *
  * Note, if we ONLY needed to compare the ADC reading to a FIXED voltage,
  * we'd simplify by letting the compiler calculate the equivalent 0-1023 value
@@ -857,8 +869,8 @@ void smsCheck (void)
  * eg to check voltage is < 3500mV:
  *   if (analogueRead(BATT) < 3500/19.35) {...}
  *
- * Also the calculations don't really need to be too accurate, because the
- * ADC itself can be be quite innacurate (up to 10% with internal AREF!)
+ * Also the calculations don't need to be too accurate, because the ADC
+ * itself can be be quite innacurate (up to 10% with internal AREF!)
  */
 uint16_t batteryRead(void)
 {
@@ -883,6 +895,7 @@ const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
 SdCard card;
 Fat16 file;
 const char file_name[13] = "CARD.BIN";
+const uint16_t file_size;
 
 boolean fileInit(void)
 {
@@ -904,22 +917,16 @@ boolean fileInit(void)
 
 boolean fileOpen(uint8_t mode)
 {
-  Serial.print(F("opening "));
+  Serial.print(F("opening file (mode 0x"));
   Serial.print(mode, HEX);
-  Serial.print(F(" :"));
+  Serial.print(F(") :"));
   Serial.println(file_name);
   return file.open(file_name, mode);
 }
 
-boolean fileOpenWrite(void)
-{
-  return(fileOpen(O_CREAT | O_WRITE | O_TRUNC));
-}
+boolean fileOpenWrite(void) { return(fileOpen(O_CREAT | O_WRITE | O_TRUNC)); }
 
-boolean fileOpenRead(void)
-{
-  return(fileOpen(O_READ));
-}
+boolean fileOpenRead(void) { return(fileOpen(O_READ)); }
 
 
 uint32_t fileCRC(uint32_t len)
@@ -1066,6 +1073,10 @@ uint16_t fonaReadBlock(uint16_t len)
   return n;
 }
 
+boolean fonaFileSize()
+{
+  fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\tmp.bin"), OK);
+}
 
 #define BLOCK_ATTEMPTS 3
 #define BLOCK_SIZE 512
@@ -1174,12 +1185,14 @@ boolean ftpGet(void)
 
 boolean getFirmware(void)
 { 
-  if ( !(fileInit() && fileOpenWrite()) ) {
+  // Ensure GPRS is on
+  if (fona.GPRSstate() != 1) {
+    Serial.println(F("no GPRS"));
     return false;
   }
 
-  if (fona.GPRSstate() != 1) {
-    Serial.println(F("no GPRS"));
+  // Open target SD file
+  if ( !(fileInit() && fileOpenWrite()) ) {
     return false;
   }
 
@@ -1190,7 +1203,7 @@ boolean getFirmware(void)
 
     int i = 3;
     while (i) {
-      if (fonaFileCopy(SIZE)) break;
+      if (fonaFileCopy(file_size)) break;
       i--;
     }
     if (i) {
@@ -1203,14 +1216,12 @@ boolean getFirmware(void)
       Serial.println(F("reflashing...."));
       delay(100);
 
-      SP=RAMEND;
-      flash_firmware();
+      //SP=RAMEND;
+      flash_firmware(file_name);
     } else {
       Serial.println(F("fona copy failed"));
     }
   }
-
-  fonaOff();
   return false;
 }
 
@@ -1280,6 +1291,10 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 }
 
 
+void smsSend() {
+  fona.sendSMS("+855969101010", "hello from tepmachcha");
+}
+
 int freeRam (void) {
   extern int __heap_start, *__brkval; 
   int v; 
@@ -1294,24 +1309,26 @@ void ram(void) {
 void printMenu(void) {
   Serial.println(F("-------------------------------------"));
   Serial.println(F("[?] Print this menu"));
-  Serial.println(F("[b] read the Battery"));
-  Serial.println(F("[E] write EEPROM"));
-  Serial.println(F("[e] read EEPROM"));
+  Serial.println(F("[b] battery mV"));
   Serial.println(F("[.oO] FONA off/power-on/GPRS-on"));
-  Serial.println(F("[G] Enable GPRS"));
-  Serial.println(F("[r] re-boot-flash"));
-  Serial.println(F("[f] ftpGet"));
-  Serial.println(F("[c] ftp copy file from fona to SD card"));
+  Serial.println(F("[G] GPRS connect only"));
+  Serial.println(F("[eE] read/write EEPROM"));
+  Serial.println(F("[r] re-boot-re-flash"));
+  Serial.println(F("[f] ftp get firmware to fona"));
+  Serial.println(F("[c] copy file from fona to SD card"));
   Serial.println(F("[T] Time - clockSet"));
-  Serial.println(F("[N] Now get time from RTC"));
+  Serial.println(F("[N] Now = time from RTC"));
   Serial.println(F("[d] dmis"));
-  Serial.println(F("[v] read sd file"));
-  Serial.println(F("[i] FS info"));
+  Serial.println(F("[v] fona firmware file info"));
+  Serial.println(F("[i] fona FS info"));
   Serial.println(F("[t] take reading"));
   Serial.println(F("[#] smsCount"));
   Serial.println(F("[s] sms check"));
+  Serial.println(F("[D] delete all SMS"));
   Serial.println(F("[C] CRC test"));
   Serial.println(F("[L] A-GPS Location"));
+  Serial.println(F("[M] free memory"));
+  Serial.println(F("[1] send sms"));
   Serial.println(F("[:] Passthru command"));
 }
 
@@ -1334,8 +1351,13 @@ void test(void)
       break;
     }
     case 'b': {
+      Serial.print (F("stalker batt: "));
       Serial.print (batteryRead());
       Serial.println (F("mV"));
+      Serial.print (F("fona batt: "));
+      uint16_t v;
+      fona.getBattVoltage (&v);   //  Read the battery voltage from FONA's ADC
+      Serial.println (v);
       break;
     }
     case 'O': {
@@ -1363,7 +1385,8 @@ void test(void)
       if ( !(fileInit() && fileOpenWrite()) ) {
         break;
       }
-      boolean s = fonaFileCopy(SIZE);
+      file_size = SIZE;
+      boolean s = fonaFileCopy(file_size);
       file.close();
       Serial.print(F("Return: "));
       Serial.println(s);
@@ -1378,15 +1401,15 @@ void test(void)
       fonaSerialOn();
       break;
     }
-    case 'E': {
-      eepromWrite();
-      break;
-    }
     case 'r': {
       Serial.println(F("reflashing...."));
       delay(100);
       SP=RAMEND;
-      flash_firmware();
+      flash_firmware(file_name);
+      break;
+    }
+    case 'E': {
+      eepromWrite();
       break;
     }
     case 'e': {
@@ -1449,7 +1472,7 @@ void test(void)
       fileInit();
       file.open(file_name, O_READ);
       file.rewind();
-      for(int i = 0; i < SIZE; i++) {
+      for(int i = 0; i < file_size; i++) {
         char c;
         c = file.read();
 
@@ -1481,6 +1504,10 @@ void test(void)
     }
     case 's': {
        smsCheck();
+       break;
+    }
+    case '1': {
+       smsSend();
        break;
     }
     case 'M': {
