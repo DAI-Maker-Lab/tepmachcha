@@ -21,11 +21,11 @@
 #define KEY4          0x0d0e0f00
 #endif
 
-#define SENSOR_HEIGHT  100  //  Height of top of octagonal gasket from streambed, in cm
-#define UTCOFFSET        0  //  Local standard time variance from UTC
+#define SENSOR_HEIGHT  500  //  Height of top of octagonal gasket from streambed, in cm
+#define UTCOFFSET        7  //  Local standard time variance from UTC
 #define XBEEWINDOWSTART 14  //  Hour to turn on XBee for programming window
 #define XBEEWINDOWEND   17  //  Hour to turn off XBee
-#define INTERVAL        15  //  Number of minutes between readings
+#define INTERVAL        10  //  Number of minutes between readings
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 #include <DS1337.h>           //  For the Stalker's real-time clock (RTC)
@@ -149,7 +149,6 @@ void setup (void)
     // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
     //fona.sendCheckReply(F("AT+CHFA=1"), OK);
 
-    /*
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		fonaOn();
 		clockSet();
@@ -159,7 +158,6 @@ void setup (void)
     fona.sendCheckReply (F("AT+CHFA=1"), OK);   // set audio, prevents crash?
 		
     fonaOff();
-    */
 
 		now = RTC.now();    //  Get the current time from the RTC
 
@@ -258,6 +256,7 @@ return;
 				}
 		}
 
+		Serial.println(F("sleeping"));
 		Serial.flush();                         //  Flush any output before sleep
 
 		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
@@ -403,10 +402,10 @@ void clockSet (void)
 }
 
 
-void wait (unsigned long period)
+void wait (uint32_t period)
 {
   // Non-blocking delay function
-  unsigned long waitend = millis() + period;
+  uint32_t waitend = millis() + period;
   while (millis() <= waitend)
   {
     Serial.flush();
@@ -474,7 +473,7 @@ boolean fonaSerialOn(void)
 
 
 boolean fonaGSMOn(void) {
-  unsigned long gsmTimeout = millis() + 30000;
+  uint32_t gsmTimeout = millis() + 30000;
 
   Serial.print (F("Connecting GSM... "));
   while (millis() < gsmTimeout)
@@ -694,7 +693,7 @@ boolean sendReading (int streamHeight)
         int16_t length = 0;
         char data[255];
 
-        unsigned int voltage;
+        int16_t voltage;
         fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
 
         int sol = solarCharging();
@@ -771,8 +770,8 @@ int8_t smsCount (void)
 }
 
 
-#define SMS_MAX_LEN 160
-#define SMS_SENDER_MAX_LEN 20
+#define SMS_MAX_LEN 180
+#define SMS_SENDER_MAX_LEN 18
 //  Check SMS messages received for any valid commands
 void smsCheck (void)
 {
@@ -782,7 +781,6 @@ void smsCheck (void)
 		boolean sendStatus = false;
 		int8_t NumSMS;
 		uint32_t timeOut = (millis() + 60000);
-    DEBUG_RAM
 
 		fonaFlush();    //  Flush out any unresolved data
 		
@@ -806,10 +804,10 @@ void smsCheck (void)
         {
             //xtea((uint32_t *)smsBuffer);
             // read filename, size, cksum
-            Serial.println(F("JACK SAYS: Rosebud"));
+            Serial.println(F("Received FOTA request"));
             fonaOn();
             file_size = SIZE;
-            file_name = "CARD.BIN";
+            strcpy_P(file_name, (prog_char*)F("CARD.BIN"));
             getFirmware();
             fonaPowerOn();
 				    fona.deleteSMS (NumSMS);
@@ -894,8 +892,8 @@ uint16_t batteryRead(void)
 const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
 SdCard card;
 Fat16 file;
-const char file_name[13] = "CARD.BIN";
-const uint16_t file_size;
+char file_name[13];
+uint16_t file_size;
 
 boolean fileInit(void)
 {
@@ -905,7 +903,7 @@ boolean fileInit(void)
 	  return false;
   }
   
-  // initialize a FAT16 volume
+  // initialize FAT16 volume
   if (!Fat16::init(&card)) {
 	  Serial.println(F("Fat16::init failed"));
 	  return false;
@@ -931,8 +929,8 @@ boolean fileOpenRead(void) { return(fileOpen(O_READ)); }
 
 uint32_t fileCRC(uint32_t len)
 {
-  uint32_t crc = ~0L;
   char c;
+  uint32_t crc = ~0L;
 
   for(int i = 0; i < len; i++) {
     c = file.read();
@@ -1086,6 +1084,7 @@ boolean fonaFileCopy(uint16_t len)
   uint16_t size = BLOCK_SIZE;
   uint16_t n;
   uint8_t retry_attempts = BLOCK_ATTEMPTS;
+  DEBUG_RAM
 
   while (address < len) {
     fonaFlush();  // flush any notifications
@@ -1228,8 +1227,8 @@ boolean getFirmware(void)
 
 boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 {
-    int statusCode;
-    int dataLen;
+    uint16_t statusCode;
+    uint16_t dataLen;
     char data[128];
     DEBUG_RAM
 
@@ -1274,13 +1273,11 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
     Serial.print (F("http code: ")); Serial.println (statusCode);
     Serial.print (F("reply len: ")); Serial.println (dataLen);
     if (dataLen > 0) {
-      fona.sendCheckReply (F("AT+HTTPREAD"),F("+HTTPREAD"));
-      while (dataLen-- >= 0)
-      {
-        Serial.write(fonaRead());
-      }
+      fona.sendCheckReply (F("AT+HTTPREAD"), OK);
+      delay(1000);
     }
 
+    fonaFlush();
     fona.HTTP_POST_end();
 
     if (statusCode == 201) {
@@ -1319,7 +1316,7 @@ void printMenu(void) {
   Serial.println(F("[T] Time - clockSet"));
   Serial.println(F("[N] Now = time from RTC"));
   Serial.println(F("[d] dmis"));
-  Serial.println(F("[v] fona firmware file info"));
+  Serial.println(F("[v] SD file info"));
   Serial.println(F("[i] fona FS info"));
   Serial.println(F("[t] take reading"));
   Serial.println(F("[#] smsCount"));
@@ -1335,6 +1332,9 @@ void printMenu(void) {
 
 void test(void)
 {
+  file_size = SIZE;
+  strcpy_P(file_name, (prog_char*)F("CARD.BIN"));
+
   Serial.print(F("FONA> "));
   while (!Serial.available() ) {
     if (fona.available()) {
@@ -1358,6 +1358,8 @@ void test(void)
       uint16_t v;
       fona.getBattVoltage (&v);   //  Read the battery voltage from FONA's ADC
       Serial.println (v);
+      Serial.print(F("Solar: "));
+      Serial.println(solarCharging());
       break;
     }
     case 'O': {
@@ -1385,7 +1387,6 @@ void test(void)
       if ( !(fileInit() && fileOpenWrite()) ) {
         break;
       }
-      file_size = SIZE;
       boolean s = fonaFileCopy(file_size);
       file.close();
       Serial.print(F("Return: "));
@@ -1489,7 +1490,7 @@ void test(void)
       }
       Serial.println();
       uint32_t crc;
-      if (fileOpenRead()) crc = fileCRC(SIZE);
+      if (fileOpenRead()) crc = fileCRC(file_size);
       Serial.print(F("CRC: "));
       Serial.println(crc, HEX);
       break;
@@ -1561,6 +1562,11 @@ void test(void)
         Serial.print(F("HELLO: "));
         Serial.println(~crc, HEX);
       }
+      Serial.print(file_name);
+      Serial.print(F(": "));
+      Serial.println(F(": "));
+      if (fileOpenRead())
+        Serial.println(fileCRC(file_size));
       break;
     }
     case 'L': {
