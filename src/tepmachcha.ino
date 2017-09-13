@@ -872,20 +872,7 @@ void smsCheck (void)
  */
 uint16_t batteryRead(void)
 {
-  uint16_t adc;
-  uint32_t mV;
-  
-  adc = analogRead(BATT);
-
-  // We could just add 155 times, but it's quicker to add/substract
-  // powers-of-two multiples of adc, which can be easily be calculated
-  // by shifting bits, eg shift <<2 bits for *4
-  // 155 = 128 + 32 - 4 - 1
-  mV = adc * 128;  // compiler converts * to equivalent <<
-  mV += adc * 32;
-  mV -= adc * 4;
-  mV -= adc;
-  return mV / 8;
+  return (analogRead(BATT) * 155) / 8;
 }
 
 
