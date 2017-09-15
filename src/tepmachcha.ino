@@ -1,7 +1,5 @@
 
 #define VERSION "1.1"      //  Version number
-#define SIZE  23258
-#define SIZE  9198
 
 //  Customize these items for each installation
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -142,20 +140,18 @@ void setup (void)
 		digitalWrite (RANGE, HIGH);          //  If set low, sonar will not range
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
 
-    fonaPowerOn();
-    fonaSerialOn();
-
-    // set ext. audio, to prevent crash on incoming calls
-    // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
-    //fona.sendCheckReply(F("AT+CHFA=1"), OK);
 
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		fonaOn();
+
+    // set ext. audio, to prevent crash on incoming calls
+    // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
+    fona.sendCheckReply(F("AT+CHFA=1"), OK);
+
 		clockSet();
 		
 		// Delete any accumulated SMS messages to avoid interference from old commands
     smsDeleteAll();
-    fona.sendCheckReply (F("AT+CHFA=1"), OK);   // set audio, prevents crash?
 		
     fonaOff();
 
@@ -165,12 +161,9 @@ void setup (void)
 		RTC.clearINTStatus();                //  Clear any outstanding interrupts
 		
 		// We'll keep the XBee on for an hour after startup to assist installation
-		if (now.hour() == 23)
-		{
+		if (now.hour() == 23) {
 				beeShutoffHour = 0;
-		}
-		else
-		{
+		} else {
 				beeShutoffHour = (now.hour() + 1);
 		}
 		beeShutoffMinute = now.minute();
@@ -186,8 +179,8 @@ void setup (void)
 
 void loop (void)
 {
-test();
-return;
+//test();
+//return;
 
 		now = RTC.now();      //  Get the current time from the RTC
 
@@ -262,7 +255,6 @@ return;
 		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
 		RTC.clearINTStatus();                   //  Clear any outstanding RTC interrupts
 		sleep.sleepInterrupt (RTCINT, FALLING); //  Sleep; wake on falling voltage on RTC pin
-
 }
 
 
@@ -272,6 +264,7 @@ void upload(int streamHeight)
 
     uint16_t v;
     fona.getBattVoltage (&v);   //  Read the battery voltage from FONA's ADC
+    //sentData = sendReading(takeReading());
     sentData = dmisPost(takeReading(), solarCharging(), v);
 
 		if (noSMS == false)
@@ -492,13 +485,12 @@ boolean fonaGSMOn(void) {
 
 
 boolean fonaGPRSOn(void) {
+  fona.setGPRSNetworkSettings (F(APN));  //  Set APN to local carrier
+  wait (5000);    //  Give the network a moment
+
   //  RSSI is a measure of signal strength -- higher is better; less than 10 is worrying
   uint8_t rssi = fona.getRSSI();
-
   Serial.print (F("RSSI: ")); Serial.println (rssi);
-
-  fona.setGPRSNetworkSettings (F(APN));  //  Set APN to local carrier
-  wait (3000);    //  Give the network a moment
 
   if (rssi > 5)
   {
@@ -781,11 +773,14 @@ void smsCheck (void)
 		boolean sendStatus = false;
 		int8_t NumSMS;
 		uint32_t timeOut = (millis() + 60000);
+    char *b = smsBuffer + sizeof(FOTAPASSWORD);
+    uint8_t i;
 
 		fonaFlush();    //  Flush out any unresolved data
 		
     NumSMS =  smsCount();
 
+    //NumSMS = 1;
 		while (NumSMS > 0)          //  If there are messages...
 		{
 				fona.readSMS (NumSMS, smsBuffer, SMS_MAX_LEN, &smsLen);  // retrieve the most recent one
@@ -794,39 +789,64 @@ void smsCheck (void)
 				fona.getSMSSender (NumSMS, smsSender, SMS_SENDER_MAX_LEN);  // get sender
 				wait (500);
 
+        //strcpy_P(smsBuffer, (prog_char*)F(FOTAPASSWORD " CARD.BIN   " " 9198   "));
+        //strcpy_P(smsBuffer, (prog_char*)F(FOTAPASSWORD " TEP.BIN   " " 23258   "));
+
 				Serial.print (F("Message from "));
 				Serial.print (smsSender);
 				Serial.println (F(":"));
 				Serial.println (smsBuffer);
 
-				//  Now check to see if any of the declared passwords are in the SMS message and respond accordingly
-				if (strcmp_P (smsBuffer, (prog_char*)F(FOTAPASSWORD)) == 0)        //  FOTA password...
+				// Now check to see if any of the declared passwords are in the SMS message and respond accordingly
+				if (strncmp_P(smsBuffer, (prog_char*)F(FOTAPASSWORD), sizeof(FOTAPASSWORD)-1) == 0) //  FOTA password...
         {
-            //xtea((uint32_t *)smsBuffer);
             // read filename, size, cksum
             Serial.println(F("Received FOTA request"));
-            fonaOn();
-            file_size = SIZE;
-            strcpy_P(file_name, (prog_char*)F("CARD.BIN"));
-            getFirmware();
-            fonaPowerOn();
-				    fona.deleteSMS (NumSMS);
+
+            file_size = 0;
+            *file_name = 0;
+
+            while (*b == ' ') b++;     // skip spaces
+
+            // read filename
+            for ( i = 0; i < 12 && b[i] && b[i] != ' ' ; i++) {
+              file_name[i] = b[i];
+            }
+            file_name[i] = 0;
+            b += i;
+
+            while (*b == ' ') b++;     // skip spaces
+
+            // read file size
+            while (*b >= '0' && *b <= '9') {
+              file_size = (file_size * 10) + (*b - '0');
+              b++;
+            }
+
+            Serial.print(F("filename:")); Serial.println(file_name);
+            Serial.print(F("size:")); Serial.println(file_size);
+
+            if (firmwareGet()) {
+              eepromWrite();
+              reflash();
+            }
+            //fona.sendSMS(smsSender, smsBuffer);  // return file stats
         }
 
 				if (strcmp_P (smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
 				{
             //  ...determine the appropriate shutoff time and turn on the XBee until then
-            beeShutoffHour = (now.hour() + 1);    //  We'll leave the XBee on for 1 hour
+            beeShutoffHour = (now.hour() + 1);   // We'll leave the XBee on for 1 hour
             if (beeShutoffHour == 24)
             beeShutoffHour = 0;
             
-            digitalWrite (BEEPIN, LOW);        //  Turn on the XBee
+            digitalWrite (BEEPIN, LOW);          // Turn on the XBee
 
             // Compose a reply to the sender confirming the action and giving the shutoff time
             sprintf_P(smsBuffer, (prog_char *)F("XBee on until %02d:%02d"), beeShutoffHour, beeShutoffMinute);
 
-            smsPower = true;                    //  Raise the flag 
-            fona.sendSMS(smsSender, smsBuffer);    //  Tell the sender what you've done
+            smsPower = true;                     //  Raise the flag 
+            fona.sendSMS(smsSender, smsBuffer);  //  Tell the sender what you've done
 
             Serial.println (F("XBee turned on by SMS."));
 				}
@@ -904,14 +924,14 @@ boolean fileOpen(uint8_t mode)
 {
   Serial.print(F("opening file (mode 0x"));
   Serial.print(mode, HEX);
-  Serial.print(F(") :"));
+  Serial.print(F("):"));
   Serial.println(file_name);
   return file.open(file_name, mode);
 }
 
 boolean fileOpenWrite(void) { return(fileOpen(O_CREAT | O_WRITE | O_TRUNC)); }
 
-boolean fileOpenRead(void) { return(fileOpen(O_READ)); }
+boolean fileOpenRead(void)  { return(fileOpen(O_READ)); }
 
 
 uint32_t fileCRC(uint32_t len)
@@ -1169,7 +1189,7 @@ boolean ftpGet(void)
 
 
 
-boolean getFirmware(void)
+boolean firmwareGet(void)
 { 
   // Ensure GPRS is on
   if (fona.GPRSstate() != 1) {
@@ -1192,23 +1212,25 @@ boolean getFirmware(void)
       if (fonaFileCopy(file_size)) break;
       i--;
     }
+
     if (i) {
-      file.close();
-      fonaOff();
-
-      Serial.println(F("updating eeprom...."));
-      eepromWrite();
-
-      Serial.println(F("reflashing...."));
-      delay(100);
-
-      //SP=RAMEND;
-      flash_firmware(file_name);
+      return true;
     } else {
       Serial.println(F("fona copy failed"));
     }
   }
   return false;
+}
+
+void reflash (void) {
+    Serial.println(F("updating eeprom...."));
+    eepromWrite();
+
+    Serial.println(F("reflashing...."));
+    delay(100);
+
+    //SP=RAMEND;
+    flash_firmware(file_name);
 }
 
 
@@ -1298,11 +1320,13 @@ void printMenu(void) {
   Serial.println(F("[G] GPRS connect only"));
   Serial.println(F("[eE] read/write EEPROM"));
   Serial.println(F("[r] re-boot-re-flash"));
-  Serial.println(F("[f] ftp get firmware to fona"));
-  Serial.println(F("[c] copy file from fona to SD card"));
+  Serial.println(F("[f] ftp firmware to fona"));
+  Serial.println(F("[c] copy file from fona to SD"));
+  Serial.println(F("[F] ftp firmware to SD"));
   Serial.println(F("[T] Time - clockSet"));
   Serial.println(F("[N] Now = time from RTC"));
   Serial.println(F("[d] dmis"));
+  Serial.println(F("[X] set test file_name/size"));
   Serial.println(F("[v] SD file info"));
   Serial.println(F("[i] fona FS info"));
   Serial.println(F("[t] take reading"));
@@ -1312,15 +1336,13 @@ void printMenu(void) {
   Serial.println(F("[C] CRC test"));
   Serial.println(F("[L] A-GPS Location"));
   Serial.println(F("[M] free memory"));
-  Serial.println(F("[1] send sms"));
+  Serial.println(F("[1] send test sms"));
   Serial.println(F("[:] Passthru command"));
 }
 
 
 void test(void)
 {
-  file_size = SIZE;
-  strcpy_P(file_name, (prog_char*)F("CARD.BIN"));
 
   Serial.print(F("FONA> "));
   while (!Serial.available() ) {
@@ -1363,7 +1385,11 @@ void test(void)
       break;
     }
     case 'f': {
-      ftpGet();
+      Serial.println(ftpGet());
+      break;
+    }
+    case 'F': {
+      Serial.println(firmwareGet());
       break;
     }
     case 'T': {
@@ -1387,6 +1413,11 @@ void test(void)
     case 'o': {
       fonaPowerOn();
       fonaSerialOn();
+      break;
+    }
+    case 'X': {
+      file_size = 9198;
+      strcpy_P(file_name, (prog_char*)F("CARD.BIN"));
       break;
     }
     case 'r': {
@@ -1476,10 +1507,12 @@ void test(void)
         }
       }
       Serial.println();
+      file.close();
       uint32_t crc;
       if (fileOpenRead()) crc = fileCRC(file_size);
       Serial.print(F("CRC: "));
       Serial.println(crc, HEX);
+      file.close();
       break;
     }
     case 'D': {
@@ -1552,8 +1585,10 @@ void test(void)
       Serial.print(file_name);
       Serial.print(F(": "));
       Serial.println(F(": "));
-      if (fileOpenRead())
+      if (fileOpenRead()) {
         Serial.println(fileCRC(file_size));
+        file.close();
+      }
       break;
     }
     case 'L': {
