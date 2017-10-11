@@ -1,5 +1,5 @@
 //  Tepmachcha version number
-#define VERSION "1.1.2"
+#define VERSION "1.1.3"
 
 //  Customize these items for each installation
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -281,8 +281,10 @@ void upload(int streamHeight)
 {
 		fonaOn();
 
-    //sentData = dmisPost(takeReading(), solarCharging(), v);
-    sentData = ews1294Post(streamHeight);
+    uint16_t voltage;
+    fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
+    //sentData = dmisPost(takeReading(), solarCharging(), voltage);
+    sentData = ews1294Post(takeReading(), solarCharging(), voltage);
 
 		if (noSMS == false)
 		{
@@ -753,67 +755,6 @@ int mode (int *x, int n)
 }
 
 
-//  Determine if panel is charging
-boolean solarCharging()
-{
-    return ( analogRead (SOLAR) > 550 && analogRead (SOLAR) <= 900 );
-}
-
-
-boolean ews1294Post (int streamHeight)
-{
-        uint16_t status_code = 0;
-        uint16_t response_length = 0;
-        char post_data[128];
-
-        uint16_t voltage;
-        fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
-        boolean sol = solarCharging();
-
-        DEBUG_RAM
-
-        // Construct the body of the POST request:
-        sprintf_P (post_data,
-            (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
-              streamHeight,
-              sol,
-              voltage,
-              now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second()
-        );
-
-        Serial.println (F("data:"));
-        Serial.println (post_data);
-
-        //  ews1294.info does not currently support SSL; if it is added you will need to uncomment the following
-        //fona.sendCheckReply (F("AT+HTTPSSL=1"), F("OK"));   //  Turn on SSL
-        //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
-
-        // Send the POST request we have constructed
-        if (fona.HTTP_POST_start ("ews1294.info/api/v1/sensorapi", F("application/x-www-form-urlencoded"), post_data, strlen(post_data), &status_code, &response_length)) {
-          // flush response
-          while (response_length > 0)
-          {
-             fonaFlush();
-             response_length--;
-          }
-        }
-
-        fona.HTTP_POST_end();
-
-        if (status_code == 200)
-        {
-            Serial.println (F("POST succeeded."));
-            return true;
-        }
-        else
-        {
-            Serial.print (F("POST failed. Status-code: "));
-            Serial.println (status_code);
-            return false;
-        }
-}
-
-
 void smsDeleteAll(void)
 {
   fona.sendCheckReply (F("AT+CMGF=1"), OK);            //  Enter text mode
@@ -850,12 +791,12 @@ char *parseFilename(char *b)
     uint8_t i;
     while (*b == ' ') b++;     // skip spaces
 
-    // read filename
+    // copy into file_name
     for ( i = 0; i < 12 && b[i] && b[i] != ' ' ; i++) {
       file_name[i] = b[i];
     }
     file_name[i] = 0;
-    return b+i;
+    return b+i;  // return postition of char after file_name
 }
 
 
@@ -892,12 +833,10 @@ void smsCheck (void)
         // FOTAPASSWD <filename> <filesize>
 				if (strncmp_P(smsBuffer, (prog_char*)F(FOTAPASSWORD), sizeof(FOTAPASSWORD)-1) == 0) //  FOTA password...
         {
-
             // read filename, size, cksum
             Serial.println(F("Received FOTA request"));
 
-            char *b = smsBuffer + sizeof(FOTAPASSWORD);
-            b = parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
+            char *b = parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
 
             while (*b == ' ') b++;     // skip spaces
 
@@ -911,7 +850,13 @@ void smsCheck (void)
             Serial.print(F("filename:")); Serial.println(file_name);
             Serial.print(F("size:")); Serial.println(file_size);
 
-            uint8_t status = firmwareGet();
+            uint8_t status;
+            if (!(status = firmwareGet()))   // If at first we dont succeed
+            {
+              fonaOn();                      // try again
+              status = firmwareGet();
+            }
+
             sprintf_P(smsBuffer, (prog_char *)F("fwGet %s (%d) status: %d, crc: %d"), \
               file_name, file_size, status, status);
             fona.sendSMS(smsSender, smsBuffer);  // return file stat, statuss
@@ -996,6 +941,126 @@ uint16_t batteryRead(void)
 }
 
 
+// Determine if panel is charging
+boolean solarCharging()
+{
+    uint16_t solar = analogRead(SOLAR);
+    Serial.print (F("solar analog: "));
+    Serial.println (solar);
+    return ( solar > 550 && solar <= 900 );
+}
+
+
+boolean ews1294Post (int streamHeight, boolean solar, uint16_t voltage)
+{
+        uint16_t status_code = 0;
+        uint16_t response_length = 0;
+        char post_data[128];
+
+        DEBUG_RAM
+
+        // Construct the body of the POST request:
+        sprintf_P (post_data,
+            (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
+              streamHeight,
+              solar,
+              voltage,
+              now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second()
+        );
+
+        Serial.println (F("data:"));
+        Serial.println (post_data);
+
+        //  ews1294.info does not currently support SSL; if it is added you will need to uncomment the following
+        //fona.sendCheckReply (F("AT+HTTPSSL=1"), F("OK"));   //  Turn on SSL
+        //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
+
+        // Send the POST request we have constructed
+        if (fona.HTTP_POST_start ("ews1294.info/api/v1/sensorapi", F("application/x-www-form-urlencoded"), post_data, strlen(post_data), &status_code, &response_length)) {
+          // flush response
+          while (response_length > 0)
+          {
+             fonaFlush();
+             response_length--;
+          }
+        }
+
+        fona.HTTP_POST_end();
+
+        if (status_code == 200)
+        {
+            Serial.println (F("POST succeeded."));
+            return true;
+        }
+        else
+        {
+            Serial.print (F("POST failed. Status-code: "));
+            Serial.println (status_code);
+            return false;
+        }
+}
+
+
+boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
+{
+    uint16_t statusCode;
+    uint16_t dataLen;
+    char postData[200];
+    DEBUG_RAM
+
+    // HTTP POST headers
+    fona.sendCheckReply (F("AT+HTTPINIT"), OK);
+    //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
+    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
+
+    // Note the data_source should match the last element of the url,
+    // which must be a valid data_source
+    // To add multiple user headers:
+    //   http://forum.sodaq.com/t/how-to-make-https-get-and-post/31/18
+    fona.sendCheckReply (F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer " DMISAPIBEARER "\""), OK);
+
+    // json data
+    sprintf_P(postData,
+      (prog_char*)F("{\"sensorId\":\"" SENSOR_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000Z\"}"),
+        streamHeight,
+        solar,
+        voltage,
+        now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
+    int s = strlen(postData);
+
+    // tell fona to receive data, and how much
+    Serial.print (F("data size:")); Serial.println (s);
+    fona.print (F("AT+HTTPDATA=")); fona.print (s);
+    fona.println (F(",2000")); // timeout
+    fona.expectReply (OK);
+
+    // send data
+    Serial.print(postData);
+    fona.print(postData);
+    delay(100);
+
+    // do the POST request
+    fona.HTTP_action (1, &statusCode, &dataLen, 10000);
+
+    // report status, response data
+    Serial.print (F("http code: ")); Serial.println (statusCode);
+    Serial.print (F("reply len: ")); Serial.println (dataLen);
+    if (dataLen > 0)
+    {
+      fona.sendCheckReply (F("AT+HTTPREAD"), OK);
+      delay(1000);
+    }
+
+    fonaFlush();
+    fona.HTTP_POST_end();
+
+    return (statusCode == 201);
+}
+
+
 const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
 SdCard card;
 Fat16 file;
@@ -1042,7 +1107,7 @@ boolean fileOpenRead(void)  { return(fileOpen(O_READ)); }
 boolean fileClose(void)
 {
   file.close();
-  digitalWrite (SD_POWER, LOW);        //  SD card on
+  digitalWrite (SD_POWER, LOW);        //  SD card off
 }
 
 
@@ -1299,9 +1364,11 @@ boolean ftpGet(void)
     delay(2000);
     if (millis() > timeout)
     {
+      ftpEnd();
       return false;
     }
   }
+  ftpEnd();
 
   // Check the file exists
   if (fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\tmp.bin"), F("ERROR")))
@@ -1316,7 +1383,6 @@ boolean ftpGet(void)
 boolean firmwareGet(void)
 { 
   // Ensure GPRS is on
-  fonaOn();
   if (fona.GPRSstate() != 1)
   {
     Serial.println(F("no GPRS"));
@@ -1325,28 +1391,20 @@ boolean firmwareGet(void)
 
   Serial.println(F("Fetching FW"));
 
-  for (uint8_t tries=3 ;tries;tries--)
+  if ( ftpGet() )
   {
-    if ( ftpGet() )
+    for (uint8_t tries=3 ;tries;tries--)
     {
-      ftpEnd();
-
-      for (tries=3 ;tries;tries--)
+      if ( fileInit() && fileOpenWrite() )
       {
-        if ( fileInit() && fileOpenWrite() )
+        if (fonaFileCopy(file_size))
         {
-          if (fonaFileCopy(file_size))
-          {
-            ftpEnd();
-            fileClose();
-            return true;
-          }
+          fileClose();
+          return true;
         }
       }
-      break;
     }
   }
-  ftpEnd();
   fileClose();
   Serial.println(F("fona copy failed"));
   return false;
@@ -1362,66 +1420,6 @@ void reflash (void) {
 
     //SP=RAMEND;
     flash_firmware(file_name);
-}
-
-
-boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
-{
-    uint16_t statusCode;
-    uint16_t dataLen;
-    char postData[200];
-    DEBUG_RAM
-
-    // HTTP POST headers
-    fona.sendCheckReply (F("AT+HTTPINIT"), OK);
-    //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
-    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
-    fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
-    fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
-    fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
-
-    // Note the data_source should match the last element of the url,
-    // which must be a valid data_source
-    // To add multiple user headers:
-    //   http://forum.sodaq.com/t/how-to-make-https-get-and-post/31/18
-    fona.sendCheckReply (F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer " DMISAPIBEARER "\""), OK);
-
-    // json data
-    sprintf_P(postData,
-      (prog_char*)F("{\"sensorId\":\"" SENSOR_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000Z\"}"),
-        streamHeight,
-        solar,
-        voltage,
-        now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
-    int s = strlen(postData);
-
-    // tell fona to receive data, and how much
-    Serial.print (F("data size:")); Serial.println (s);
-    fona.print (F("AT+HTTPDATA=")); fona.print (s);
-    fona.println (F(",2000")); // timeout
-    fona.expectReply (OK);
-
-    // send data
-    Serial.print(postData);
-    fona.print(postData);
-    delay(100);
-
-    // do the POST request
-    fona.HTTP_action (1, &statusCode, &dataLen, 10000);
-
-    // report status, response data
-    Serial.print (F("http code: ")); Serial.println (statusCode);
-    Serial.print (F("reply len: ")); Serial.println (dataLen);
-    if (dataLen > 0)
-    {
-      fona.sendCheckReply (F("AT+HTTPREAD"), OK);
-      delay(1000);
-    }
-
-    fonaFlush();
-    fona.HTTP_POST_end();
-
-    return (statusCode == 201);
 }
 
 
@@ -1543,7 +1541,7 @@ void test(void)
     }
     case 'd': {
       //dmisPost(takeReading(), solarCharging(), batteryRead());
-      ews1294Post(takeReading());
+      ews1294Post(takeReading(), solarCharging(), batteryRead());
       break;
     }
     case 'o': {
