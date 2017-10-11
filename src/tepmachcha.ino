@@ -77,7 +77,7 @@ byte beeShutoffHour = 0;        //  Hour to turn off manual power to XBee
 byte beeShutoffMinute = 0;      //  Minute to turn off manual power to XBee
 char method = 0;                //  Method of clock set, for debugging
 
-static boolean testmenu = 0;
+//static boolean testmenu = 0;
 
 DateTime now;
 
@@ -309,20 +309,27 @@ void upload(int streamHeight)
 }
 
 
-/*
-#define YEAR(_i)   (_i + 0)
-#define MONTH(_i)  (_i + 2)
-#define DAY(_i)    (_i + 3)
-#define HOUR(_i)   (_i + 4)
-#define MINUTE(_i) (_i + 5)
-#define SECOND(_i) (_i + 6)
+
+#define YEAR   in->year
+#define MONTH  in->month
+#define DAY    in->day
+#define HOUR   in->hour
+#define MINUTE in->minute
+#define SECOND in->second
 
 void clockSet2 (void)
 {
-		uint8_t netOffset;
+    int16_t values[7];
+    struct {
+      int16_t year;
+      int16_t month;
+      int16_t day;
+      int16_t hour;
+      int16_t minute;
+      int16_t second;
+    } *in;
+
 		char theDate[17];
-    union {
-    uint16_t values[7]
 
 		Serial.println (F("Fetching GSM time"));
 		wait (1000);    //  Give time for any trailing data to come in from FONA
@@ -330,28 +337,73 @@ void clockSet2 (void)
 		fonaFlush();    //  Flush any trailing data
 		fona.sendCheckReply (F("AT+CIPGSMLOC=2,1"), OK);    //  Query GSM location service for time
 
+    // Read date elements from fona
 		fona.parseInt();                    //  Ignore first int
-    for (i = 0; i < 7;i--)
-    {
-		  values[i] = fona.parseInt();
-    }
-    i = 0;
-		if (YEAR{values,i}] < 2016 || YEAR{values,i}] > 2050 || HOUR(values,i) > 23) //  If that obviously didn't work...
-}
+    for (uint8_t i = 0; i < 7;i++) { values[i] = fona.parseInt(); }
 
-*/
+    // Set the window to the second element of the array of values read from fona
+    in = (void *)&(values[1]);
+
+    if (YEAR < 2016 || YEAR > 2050 || HOUR > 23) //  If that obviously didn't work...
+    {
+      // Set the window to the first element
+      in = (void *)&(values[0]);
+
+		  if (YEAR < 2016 || YEAR > 2050 || HOUR > 23) //  If that obviously didn't work...
+      {
+
+				Serial.println (F("GSM location failed, trying NTP sync"));
+				fona.enableNTPTimeSync (true, F("0.daimakerlab.pool.ntp.org"));
+				wait (15000);                 // Wait for NTP server response
+				
+				fona.println (F("AT+CCLK?")); // Query FONA's clock for resulting NTP time              
+
+        // Read date elements from fona
+        for (uint8_t i = 0; i < 6;i++) { values[i] = fona.parseInt(); }
+      }
+    }
+
+    if (YEAR > 2000) YEAR -= 2000;
+    if (YEAR >= 16 || YEAR <= 50 || HOUR <= 23) //  If that obviously didn't work...
+    {
+      //  Adjust UTC to local time
+#define LOCALTIME (HOUR + UTCOFFSET)
+      if ( LOCALTIME < 0 )       // TZ takes us back a day
+      {
+        HOUR = LOCALTIME + 24;
+        DAY--;
+      }
+      else if ( LOCALTIME > 23 ) // TZ takes us to next day
+      {
+        HOUR = LOCALTIME - 24;
+        DAY++;
+      }
+      
+      Serial.print (F("Obtained current time: "));
+      sprintf_P(theDate, (prog_char*)F("%d/%d/%d %d:%d"), DAY, MONTH, YEAR, HOUR, MINUTE);
+      Serial.print (theDate);
+
+      Serial.println(F(". Adjusting RTC"));
+      DateTime dt(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, 0);
+      now = dt;
+      RTC.adjust(dt);     //  Adjust date-time as defined above
+    }
+    else
+    {
+      Serial.println (F("Network time failed, using RTC"));
+      method = 'X';
+		}
+
+		wait (200);              //  Give FONA a moment to catch its breath
+}
 
 
 void clockSet (void)
 {
-		wait (1000);    //  Give time for any trailing data to come in from FONA
-
-		int netOffset;
-
 		char theDate[17];
 
 		Serial.println (F("Fetching GSM time"));
-
+		wait (1000);    //  Give time for any trailing data to come in from FONA
 		fonaFlush();    //  Flush any trailing data
 
 		fona.sendCheckReply (F("AT+CIPGSMLOC=2,1"), OK);    //  Query GSM location service for time
@@ -367,24 +419,23 @@ void clockSet (void)
 
 		if (netYear < 2016 || netYear > 2050 || netHour > 23) //  If that obviously didn't work...
 		{
+				Serial.println (F("Recombobulating..."));
+
 				netSecond = netMinute;  //  ...shift everything up one to capture that second int
 				netMinute = netHour;
 				netHour = netDay;
 				netDay = netMonth;
 				netMonth = netYear;
 				netYear = secondInt;
-
-				Serial.println (F("Recombobulating..."));
 		}
 
 		if (netYear < 2016 || netYear > 2050 || netHour > 23)   // If that still didn't work...
 		{
-				Serial.println (F("GSM location service failed"));
-				/*   get time from the NTP pool instead: 
-				 *   (https://en.wikipedia.org/wiki/Network_Time_Protocol)
-				 */
+				// get time from the NTP pool instead: 
+				// (https://en.wikipedia.org/wiki/Network_Time_Protocol)
+        //
 				fona.enableNTPTimeSync (true, F("0.daimakerlab.pool.ntp.org"));
-				Serial.println (F("trying NTP sync"));
+				Serial.println (F("GSM location failed, trying NTP sync"));
 				
 				wait (15000);                 // Wait for NTP server response
 				
@@ -403,27 +454,26 @@ void clockSet (void)
 				method = 'G';
 		}
 
-		if ((netYear < 1000 && netYear >= 16 && netYear < 50) || (netYear > 1000 && netYear >= 2016 && netYear < 2050))
-		//  If we got something that looks like a valid date...
+    if (netYear > 2000) { netYear -= 2000; }  // Adjust from YYYY to YY
+		if (netYear >= 16 && netYear < 50)        // Date looks valid
 		{
 				//  Adjust UTC to local time
-				if((netHour + UTCOFFSET) < 0)                   //  If our offset + the UTC hour < 0...
+        //#define localtime (netHour + UTCOFFSET)
+        int8_t localtime = (netHour + UTCOFFSET);
+				if ( localtime < 0)                   // TZ takes us back a day
 				{
-				        netHour = (24 + netHour + UTCOFFSET);   //  ...add 24...
-				        netDay = (netDay - 1);                  //  ...and adjust the date to UTC - 1
+				    netDay = netDay - 1;                // adjust the date to UTC - 1
+				    netHour = localtime + 24;           // hour % 24
 				}
-				else
-				{
-				        if((netHour + UTCOFFSET) > 23)          //  If our offset + the UTC hour > 23...
-				        {
-				                netHour = (netHour + UTCOFFSET - 24); //  ...subtract 24...
-				                netDay = (netDay + 1);                //  ...and adjust the date to UTC + 1
-				        }
-				        else
-				        {
-				                netHour = (netHour + UTCOFFSET);      //  Otherwise it's straight addition
-				        }
-				}
+				else if (localtime > 23)              // TZ takes to the next day
+        {
+            netDay = netDay + 1;                // adjust the date to UTC + 1
+            netHour = localtime - 24;           // hour % 24
+        }
+        else                                  // TZ is same day
+        {
+            netHour = localtime;                // simply add TZ offset
+        }
 
 				Serial.print (F("Obtained current time: "));
 				sprintf_P(theDate, (prog_char*)F("%d/%d/%d %d:%d"), netDay, netMonth, netYear, netHour, netMinute);
@@ -625,6 +675,9 @@ int takeReading (void)
 		//  We will take the mode of seven samples to try to filter spurious readings
 		int sample[] = {0, 0, 0, 0, 0, 0, 0};   //  Initial sample values
 		
+    digitalWrite (RANGE, HIGH);           //  sonar on
+    wait (1000);
+
 		for (int sampleCount = 0; sampleCount < 7; sampleCount++)
 		{
 				sample[sampleCount] = pulseIn (PING, HIGH);
@@ -632,7 +685,7 @@ int takeReading (void)
 				Serial.print (sampleCount);
 				Serial.print (F(": "));
 				Serial.println (sample[sampleCount]);
-				wait (10);
+				wait (50);
 		}
 
 		int sampleMode = mode (sample, 7);
@@ -646,37 +699,8 @@ int takeReading (void)
 		Serial.print (streamHeight);
 		Serial.println (F("cm."));
 
+    digitalWrite (RANGE, LOW);           //  sonar off
 		return streamHeight;
-}
-
-
-boolean validate (int alertThreshold)
-{
-  /*   False positives would undermine confidence in the IVR alerts, so we must take
-   *   pains to avoid them. Before triggering an alert flow, we will validate the
-   *   reading by taking five readings and making sure they _all_ agree. If the
-   *   levels are marginal, that might mean we don't send an alert for a while (because
-   *   some readings might come in below the threshold).
-   */
-
-  boolean valid = true;
-
-  for (int i = 0; i < 5; i++)
-  {
-	  wait (5000);
-	  Serial.print (F("Validation reading #"));
-	  Serial.println (i);
-
-	  int doubleCheck = takeReading();
-
-	  if (doubleCheck < alertThreshold)
-    {
-	    Serial.println (F("Validation does not agree."));
-	    valid = false;
-	    break;
-	  }
-  }
-  return valid;
 }
 
 
@@ -732,7 +756,7 @@ int mode (int *x, int n)
 //  Determine if panel is charging
 boolean solarCharging()
 {
-    return (analogRead (SOLAR) <= 900 && analogRead (SOLAR) > 550);
+    return ( analogRead (SOLAR) > 550 && analogRead (SOLAR) <= 900 );
 }
 
 
@@ -744,12 +768,7 @@ boolean ews1294Post (int streamHeight)
 
         uint16_t voltage;
         fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
-        Serial.print(F("battery: "));
-        Serial.println(voltage);
-
         boolean sol = solarCharging();
-        Serial.print(F("solar: "));
-        Serial.println(sol);
 
         DEBUG_RAM
 
@@ -1006,6 +1025,9 @@ boolean fileInit(void)
 
 boolean fileOpen(uint8_t mode)
 {
+  digitalWrite (SD_POWER, HIGH);        //  SD card on
+  wait (1000);
+
   Serial.print(F("opening file (mode 0x"));
   Serial.print(mode, HEX);
   Serial.print(F("):"));
@@ -1016,6 +1038,12 @@ boolean fileOpen(uint8_t mode)
 boolean fileOpenWrite(void) { return(fileOpen(O_CREAT | O_WRITE | O_TRUNC)); }
 
 boolean fileOpenRead(void)  { return(fileOpen(O_READ)); }
+
+boolean fileClose(void)
+{
+  file.close();
+  digitalWrite (SD_POWER, LOW);        //  SD card on
+}
 
 
 uint32_t fileCRC(uint32_t len)
@@ -1307,13 +1335,19 @@ boolean firmwareGet(void)
       {
         if ( fileInit() && fileOpenWrite() )
         {
-          if (fonaFileCopy(file_size)) return true;
+          if (fonaFileCopy(file_size))
+          {
+            ftpEnd();
+            fileClose();
+            return true;
+          }
         }
       }
       break;
     }
   }
   ftpEnd();
+  fileClose();
   Serial.println(F("fona copy failed"));
   return false;
 }
@@ -1453,7 +1487,7 @@ void test(void)
 
   switch (command) {
     case 'q': {
-       testmenu = 0;
+       //testmenu = 0;
        break;
     }
     case '?': {
