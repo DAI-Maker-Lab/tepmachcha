@@ -205,7 +205,6 @@ void loop (void)
 		Serial.print (F(":"));
 		Serial.println (now.minute());
 
-		int streamHeight = takeReading();
 
 		/*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
 	   *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
@@ -217,6 +216,7 @@ void loop (void)
 
 		if (now.minute() % INTERVAL == 0 && sentData == false)   //  If it is time to send a scheduled reading...
 		{
+		    int streamHeight = takeReading();
 				upload (streamHeight);
 		}
 		else
