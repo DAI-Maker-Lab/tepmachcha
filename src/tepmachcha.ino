@@ -28,7 +28,7 @@
 #define UTCOFFSET        7  //  Local standard time variance from UTC
 #define XBEEWINDOWSTART 14  //  Hour to turn on XBee for programming window
 #define XBEEWINDOWEND   17  //  Hour to turn off XBee
-#define INTERVAL         4  //  Number of minutes between readings
+#define INTERVAL         5  //  Number of minutes between readings
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 #include <DS1337.h>           //  For the Stalker's real-time clock (RTC)
@@ -845,7 +845,7 @@ int8_t smsCount (void)
 }
 
 
-uint8_t parseFilename(char *b)
+char *parseFilename(char *b)
 {
     uint8_t i;
     while (*b == ' ') b++;     // skip spaces
@@ -855,11 +855,11 @@ uint8_t parseFilename(char *b)
       file_name[i] = b[i];
     }
     file_name[i] = 0;
-    return i;
+    return b+i;
 }
 
 
-#define SMS_MAX_LEN 180
+#define SMS_MAX_LEN 80
 #define SMS_SENDER_MAX_LEN 18
 //  Check SMS messages received for any valid commands
 void smsCheck (void)
@@ -897,7 +897,7 @@ void smsCheck (void)
             Serial.println(F("Received FOTA request"));
 
             char *b = smsBuffer + sizeof(FOTAPASSWORD);
-            b += parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
+            b = parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
 
             while (*b == ' ') b++;     // skip spaces
 
@@ -911,9 +911,8 @@ void smsCheck (void)
             Serial.print(F("filename:")); Serial.println(file_name);
             Serial.print(F("size:")); Serial.println(file_size);
 
-            uint8_t status;
-            status = firmwareGet();
-            sprintf_P(smsBuffer, (prog_char *)F("fwGet %s %d status: %d, crc: %d"), \
+            uint8_t status = firmwareGet();
+            sprintf_P(smsBuffer, (prog_char *)F("fwGet %s (%d) status: %d, crc: %d"), \
               file_name, file_size, status, status);
             fona.sendSMS(smsSender, smsBuffer);  // return file stat, statuss
         }
@@ -1005,6 +1004,9 @@ uint16_t file_size;
 
 boolean fileInit(void)
 {
+  digitalWrite (SD_POWER, HIGH);        //  SD card on
+  wait (1000);
+
   // init sd card
   if (!card.begin(CHIP_SELECT))
   {
@@ -1025,8 +1027,6 @@ boolean fileInit(void)
 
 boolean fileOpen(uint8_t mode)
 {
-  digitalWrite (SD_POWER, HIGH);        //  SD card on
-  wait (1000);
 
   Serial.print(F("opening file (mode 0x"));
   Serial.print(mode, HEX);
