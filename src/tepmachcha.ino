@@ -44,7 +44,8 @@
 // receive much from XBee we can reduce the buffer.
 #define SERIAL_BUFFER_SIZE 16
 
-#define RTCINT 0    //  RTC interrupt number
+#define RTCINTA 0    //  RTC INTA
+#define RTCINTB 1    //  RTC INTB
 
 #define RTCPIN   2  //  Onboard Stalker RTC pin
 #define FONA_RST 3  //  FONA RST pin
@@ -120,11 +121,11 @@ void setup (void)
 		pinMode (SD_POWER, OUTPUT);
 
     // Set RTC interrupt handler
-		attachInterrupt (RTCINT, rtcIRQ, FALLING);
+		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
 		interrupts();
 
     digitalWrite (RANGE, LOW);           //  sonar off
-		digitalWrite (SD_POWER, LOW);        //  SD card off
+		digitalWrite (SD_POWER, HIGH);       //  SD card off
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
     digitalWrite (BEEPIN, LOW);          //  XBee on
 
@@ -144,7 +145,7 @@ void setup (void)
 				RTC.enableInterrupts (EveryHour); //  We'll wake up once an hour
 				RTC.clearINTStatus();             //  Clear any outstanding interrupts
 				sleep.pwrDownMode();                    //  Set sleep mode to Power Down
-				sleep.sleepInterrupt (RTCINT, FALLING); //  Sleep; wake on falling voltage on RTC pin
+				sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 		}
 
 		// We will use the FONA to get the current time to set the Stalker's RTC
@@ -214,15 +215,12 @@ void loop (void)
      *
      */
 
-		if (now.minute() % INTERVAL == 0 && sentData == false)   //  If it is time to send a scheduled reading...
+		//if (now.minute() % INTERVAL == 0 && !sentData)   //  If it is time to send a scheduled reading...
+		if (now.minute() % INTERVAL == 0)   //  If it is time to send a scheduled reading...
 		{
-		    int streamHeight = takeReading();
-				upload (streamHeight);
-		}
-		else
-		{
-				sentData = false;
-		}
+				upload (takeReading());
+    }
+		//} else { sentData = false };
 
 		//  We will turn on the XBee radio for programming only within a specific
 		//  window to save power
@@ -273,41 +271,42 @@ void loop (void)
 		//sleep.adcMode();
 		//sleep.idleMode();
 		RTC.clearINTStatus();                   //  Clear any outstanding RTC interrupts
-		sleep.sleepInterrupt (RTCINT, FALLING); //  Sleep; wake on falling voltage on RTC pin
+		sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 }
 
 
 void upload(int streamHeight)
 {
-		fonaOn();
+		if (fonaOn())
+    {
 
-    uint16_t voltage;
-    fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
-    //sentData = dmisPost(takeReading(), solarCharging(), voltage);
-    sentData = ews1294Post(takeReading(), solarCharging(), voltage);
+      ews1294Post(streamHeight, solarCharging(), fonaBattery());
+      //sentData = ews1294Post(streamHeight, solarCharging(), fonaBattery());
 
-		if (noSMS == false)
-		{
-				smsCheck();
-		}
+      if (noSMS == false)
+      {
+          smsCheck();
+      }
 
-		/*   The RTC drifts more than the datasheet says, so we'll reset the time every day at
-		 *   midnight. 
-		 *
-     */
-		if (now.hour() == 0 && timeReset == false)
-		{
-				clockSet();
-				timeReset = true;
-		}
+      /*   The RTC drifts more than the datasheet says, so we'll reset the time every day at
+       *   midnight. 
+       *
+       */
+      if (now.hour() == 0 && timeReset == false)
+      {
+          clockSet();
+          timeReset = true;
+      }
+      //else { sentData = false }
 
-		if (now.hour() != 0)
-		{
-				timeReset = false;
-		}
-		
+      if (now.hour() != 0)
+      {
+          timeReset = false;
+      }
+      
+    }
+
 		fonaOff();
-    //sentData = true;
 }
 
 
@@ -372,13 +371,13 @@ void clockSet2 (void)
 #define LOCALTIME (HOUR + UTCOFFSET)
       if ( LOCALTIME < 0 )       // TZ takes us back a day
       {
-        HOUR = LOCALTIME + 24;
         DAY--;
+        HOUR = LOCALTIME + 24;
       }
       else if ( LOCALTIME > 23 ) // TZ takes us to next day
       {
-        HOUR = LOCALTIME - 24;
         DAY++;
+        HOUR = LOCALTIME - 24;
       }
       
       Serial.print (F("Obtained current time: "));
@@ -419,7 +418,7 @@ void clockSet (void)
 		int netMinute = fona.parseInt();
 		int netSecond = fona.parseInt();    //  Our seconds may lag slightly, of course
 
-		if (netYear < 2016 || netYear > 2050 || netHour > 23) //  If that obviously didn't work...
+		if (netYear < 2017 || netYear > 2050 || netHour > 23) //  If that obviously didn't work...
 		{
 				Serial.println (F("Recombobulating..."));
 
@@ -431,7 +430,7 @@ void clockSet (void)
 				netYear = secondInt;
 		}
 
-		if (netYear < 2016 || netYear > 2050 || netHour > 23)   // If that still didn't work...
+		if (netYear < 2017 || netYear > 2050 || netHour > 23)   // If that still didn't work...
 		{
 				// get time from the NTP pool instead: 
 				// (https://en.wikipedia.org/wiki/Network_Time_Protocol)
@@ -457,19 +456,19 @@ void clockSet (void)
 		}
 
     if (netYear > 2000) { netYear -= 2000; }  // Adjust from YYYY to YY
-		if (netYear >= 16 && netYear < 50)        // Date looks valid
+		if (netYear >= 17 && netYear < 50)        // Date looks valid
 		{
 				//  Adjust UTC to local time
         //#define localtime (netHour + UTCOFFSET)
         int8_t localtime = (netHour + UTCOFFSET);
 				if ( localtime < 0)                   // TZ takes us back a day
 				{
-				    netDay = netDay - 1;                // adjust the date to UTC - 1
+				    netDay -= 1;                        // adjust the date to UTC - 1
 				    netHour = localtime + 24;           // hour % 24
 				}
-				else if (localtime > 23)              // TZ takes to the next day
+				else if (localtime > 23)              // TZ takes us to the next day
         {
-            netDay = netDay + 1;                // adjust the date to UTC + 1
+            netDay += 1;                        // adjust the date to UTC + 1
             netHour = localtime - 24;           // hour % 24
         }
         else                                  // TZ is same day
@@ -531,7 +530,7 @@ void fonaFlush (void)
 
 char fonaRead(void)
 {
-  // read from fona with timeout
+  // read from fona, waiting up to <timeout> ms for something at arrive
   uint32_t timeout = millis() + 1000;
 
   while(!fona.available())
@@ -672,15 +671,24 @@ void fonaOff (void)
 }
 
 
-int takeReading (void)
+uint16_t fonaBattery(void) {
+    uint16_t voltage;
+    do {
+      fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
+    } while (! (voltage < 6000 && voltage > 1000));
+    return voltage;
+}
+
+
+int16_t takeReading (void)
 {
 		//  We will take the mode of seven samples to try to filter spurious readings
-		int sample[] = {0, 0, 0, 0, 0, 0, 0};   //  Initial sample values
+		int16_t sample[] = {0, 0, 0, 0, 0, 0, 0};   //  Initial sample values
 		
     digitalWrite (RANGE, HIGH);           //  sonar on
     wait (1000);
 
-		for (int sampleCount = 0; sampleCount < 7; sampleCount++)
+		for (uint8_t sampleCount = 0; sampleCount < 7; sampleCount++)
 		{
 				sample[sampleCount] = pulseIn (PING, HIGH);
 				Serial.print (F("Sample "));
@@ -690,9 +698,9 @@ int takeReading (void)
 				wait (50);
 		}
 
-		int sampleMode = mode (sample, 7);
+		int16_t sampleMode = mode (sample, 7);
 
-		int streamHeight = (SENSOR_HEIGHT - (sampleMode / 10)); //  1 µs pulse = 1mm distance
+		int16_t streamHeight = (SENSOR_HEIGHT - (sampleMode / 10)); //  1 µs pulse = 1mm distance
 
 		Serial.print (F("Surface distance from sensor is "));
 		Serial.print (sampleMode);
@@ -771,6 +779,7 @@ int8_t smsCount (void)
 		 */
 		uint32_t smsTimeout = millis() + 60000;
     int8_t NumSMS; // fona.getNumSMS returns -1 on failure
+
     DEBUG_RAM
 
 		Serial.println (F("Checking for SMS messages..."));
@@ -789,14 +798,17 @@ int8_t smsCount (void)
 char *parseFilename(char *b)
 {
     uint8_t i;
-    while (*b == ' ') b++;     // skip spaces
+
+    DEBUG_RAM
+
+    while (*b == ' ') b++; // skip spaces
 
     // copy into file_name
     for ( i = 0; i < 12 && b[i] && b[i] != ' ' ; i++) {
       file_name[i] = b[i];
     }
-    file_name[i] = 0;
-    return b+i;  // return postition of char after file_name
+    file_name[i] = 0;      // terminate string
+    return b+i;            // return postition of char after file_name
 }
 
 
@@ -941,21 +953,37 @@ uint16_t batteryRead(void)
 }
 
 
-// Determine if panel is charging
+// Solar panel charging status
+//
+// Detect the status of the CN3065 charge controller 'charging' and 'done' pins,
+// with voltage divider between vbatt and status pins:
+//  vbatt----10M----+-----+---1M----DONE
+//                  |     |
+//              SOLAR(A6)  +---2M----CHARGING
+//
+// SLEEPING: Both pins are gnd when solar voltage is < battery voltage +40mv
+//
+// AREF      1.1    3.3
+// =====    ====   ====
+// ERROR      0+     0+
+// DONE     350+   115+  ( 4.2v / (10M + 1M)/1M ) = 0.38v
+// CHARGING 550+   180+  ( 3.6v / (10M + 2M)/2M ) = 0.6v
+// SLEEPING 900+   220+  ( vbatt ) = 3.6v - 4.2v
 boolean solarCharging()
 {
-    uint16_t solar = analogRead(SOLAR);
+    int16_t solar = analogRead(SOLAR);
     Serial.print (F("solar analog: "));
     Serial.println (solar);
-    return ( solar > 550 && solar <= 900 );
+    return ( solar > 180 && solar <= 220 );     // 3.3v analogue ref
+    //return ( solar > 550 && solar <= 900 );   // 1.1v analogue ref
 }
 
 
-boolean ews1294Post (int streamHeight, boolean solar, uint16_t voltage)
+boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
 {
         uint16_t status_code = 0;
         uint16_t response_length = 0;
-        char post_data[128];
+        char post_data[200];
 
         DEBUG_RAM
 
@@ -985,6 +1013,7 @@ boolean ews1294Post (int streamHeight, boolean solar, uint16_t voltage)
           }
         }
 
+        fonaFlush();
         fona.HTTP_POST_end();
 
         if (status_code == 200)
@@ -999,6 +1028,74 @@ boolean ews1294Post (int streamHeight, boolean solar, uint16_t voltage)
             return false;
         }
 }
+/*
+boolean ews1294Post2 (int16_t streamHeight, boolean solar, uint16_t voltage)
+{
+    uint16_t statusCode;
+    uint16_t dataLen;
+    char postData[128]; // was 200
+    DEBUG_RAM
+
+    // HTTP POST headers
+    fona.sendCheckReply (F("AT+HTTPINIT"), OK);
+    //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
+    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
+
+        sprintf_P (post_data,
+            (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
+              streamHeight,
+              solar,
+              voltage,
+              now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second()
+        );
+
+    // Note the data_source should match the last element of the url,
+    // which must be a valid data_source
+    // To add multiple user headers:
+    //   http://forum.sodaq.com/t/how-to-make-https-get-and-post/31/18
+    fona.sendCheckReply (F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer " DMISAPIBEARER "\""), OK);
+
+    // json data
+    sprintf_P(postData,
+      (prog_char*)F("{\"sensorId\":\"" SENSOR_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000Z\"}"),
+        streamHeight,
+        solar,
+        voltage,
+        now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
+    int s = strlen(postData);
+
+    // tell fona to receive data, and how much
+    Serial.print (F("data size:")); Serial.println (s);
+    fona.print (F("AT+HTTPDATA=")); fona.print (s);
+    fona.println (F(",2000")); // timeout
+    fona.expectReply (OK);
+
+    // send data
+    Serial.print(postData);
+    fona.print(postData);
+    delay(100);
+
+    // do the POST request
+    fona.HTTP_action (1, &statusCode, &dataLen, 10000);
+
+    // report status, response data
+    Serial.print (F("http code: ")); Serial.println (statusCode);
+    Serial.print (F("reply len: ")); Serial.println (dataLen);
+    if (dataLen > 0)
+    {
+      fona.sendCheckReply (F("AT+HTTPREAD"), OK);
+      delay(1000);
+    }
+
+    fonaFlush();
+    fona.HTTP_POST_end();
+
+    return (statusCode == 201);
+}
+*/
 
 
 boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
@@ -1069,7 +1166,7 @@ uint16_t file_size;
 
 boolean fileInit(void)
 {
-  digitalWrite (SD_POWER, HIGH);        //  SD card on
+  digitalWrite (SD_POWER, LOW);        //  SD card on
   wait (1000);
 
   // init sd card
@@ -1107,7 +1204,7 @@ boolean fileOpenRead(void)  { return(fileOpen(O_READ)); }
 boolean fileClose(void)
 {
   file.close();
-  digitalWrite (SD_POWER, LOW);        //  SD card off
+  digitalWrite (SD_POWER, HIGH);        //  SD card off
 }
 
 
@@ -1141,14 +1238,14 @@ void eepromWrite(void)
 #define XON  17
 void xon(void)
 {
-  digitalWrite(FONA_RTS, HIGH);
+  //digitalWrite(FONA_RTS, HIGH);
 }
 
 // serial flow control off
 #define XOFF 19
 void xoff(void)
 {
-  digitalWrite(FONA_RTS, LOW);
+  //digitalWrite(FONA_RTS, LOW);
 }
 
 
@@ -1356,7 +1453,10 @@ boolean ftpGet(void)
   fona.sendCheckReply (F("AT+FSDEL=C:\\User\\ftp\\tmp.bin"), OK); // delete previous download file
 
   // start the download to local file
-  fona.sendCheckReply (F("AT+FTPGETTOFS=0,\"tmp.bin\""), OK);
+  if ( !fona.sendCheckReply (F("AT+FTPGETTOFS=0,\"tmp.bin\""), OK))
+  {
+    return false;
+  }
 
   // Wait for download complete; FTPGETOFS status 0
   uint32_t timeout = millis() + 90000;
@@ -1497,9 +1597,7 @@ void test(void)
       Serial.print (batteryRead());
       Serial.println (F("mV"));
       Serial.print (F("fona batt: "));
-      uint16_t v;
-      fona.getBattVoltage (&v);   //  Read the battery voltage from FONA's ADC
-      Serial.println (v);
+      Serial.println (fonaBattery());
       Serial.print(F("Solar: "));
       Serial.println(solarCharging());
       break;
@@ -1540,8 +1638,8 @@ void test(void)
       break;
     }
     case 'd': {
-      //dmisPost(takeReading(), solarCharging(), batteryRead());
-      ews1294Post(takeReading(), solarCharging(), batteryRead());
+      //dmisPost(takeReading(), solarCharging(), fonaBattery());
+      ews1294Post(takeReading(), solarCharging(), fonaBattery());
       break;
     }
     case 'o': {
