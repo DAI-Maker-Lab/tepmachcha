@@ -77,6 +77,7 @@ boolean timeReset = false;      //  Flag indicating whether midnight time reset 
 byte beeShutoffHour = 0;        //  Hour to turn off manual power to XBee
 byte beeShutoffMinute = 0;      //  Minute to turn off manual power to XBee
 char method = 0;                //  Method of clock set, for debugging
+uint8_t error;
 
 //static boolean testmenu = 0;
 
@@ -459,8 +460,8 @@ void clockSet (void)
 		if (netYear >= 17 && netYear < 50)        // Date looks valid
 		{
 				//  Adjust UTC to local time
-        //#define localtime (netHour + UTCOFFSET)
-        int8_t localtime = (netHour + UTCOFFSET);
+        #define localtime (netHour + UTCOFFSET)
+        //int8_t localtime = (netHour + UTCOFFSET);
 				if ( localtime < 0)                   // TZ takes us back a day
 				{
 				    netDay -= 1;                        // adjust the date to UTC - 1
@@ -673,9 +674,10 @@ void fonaOff (void)
 
 uint16_t fonaBattery(void) {
     uint16_t voltage;
-    do {
-      fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
-    } while (! (voltage < 6000 && voltage > 1000));
+    fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
+    if (! (voltage < 6000 && voltage > 1000))
+      fona.getBattVoltage (&voltage); // try one more time
+
     return voltage;
 }
 
@@ -868,6 +870,10 @@ void smsCheck (void)
               fonaOn();                      // try again
               status = firmwareGet();
             }
+            if (!status)
+            {
+              status = error;
+            }
 
             sprintf_P(smsBuffer, (prog_char *)F("fwGet %s (%d) status: %d, crc: %d"), \
               file_name, file_size, status, status);
@@ -927,7 +933,7 @@ void smsCheck (void)
  *
  * We use integer math to avoid including ~1.2K of FP/multiplication library
  * AREF ADC->mV factor   approx integer fraction
- * ---- --------------   -----------------------
+ * ==== ==============   =======================
  * 1.1      6.45          1651/256 (~103/16)   (103 = 64 + 32 + 8 - 1)
  * 3.3     19.35          4955/256 (~155/8)    (155 = 128 + 32 - 4 - 1)
  *
@@ -942,8 +948,8 @@ void smsCheck (void)
  */
 uint16_t batteryRead(void)
 {
-  //return ((uint32_t)analogRead(BATT) * 155) / 8;
   uint32_t mV = 0;
+  //return ((uint32_t)analogRead(BATT) * 155) / 8;
 
   for (uint8_t i = 155; i;i--)
   {
@@ -955,27 +961,26 @@ uint16_t batteryRead(void)
 
 // Solar panel charging status
 //
-// Detect the status of the CN3065 charge controller 'charging' and 'done' pins,
-// with voltage divider between vbatt and status pins:
+// Detect status of the CN3065 charge-controller 'charging' and 'done' pins,
+// which have a voltage divider between vbatt and status pins:
 //  vbatt----10M----+-----+---1M----DONE
 //                  |     |
-//              SOLAR(A6)  +---2M----CHARGING
+//             SOLAR(A6)  +---2M----CHARGING
 //
 // SLEEPING: Both pins are gnd when solar voltage is < battery voltage +40mv
 //
 // AREF      1.1    3.3
 // =====    ====   ====
 // ERROR      0+     0+
-// DONE     350+   115+  ( 4.2v / (10M + 1M)/1M ) = 0.38v
-// CHARGING 550+   180+  ( 3.6v / (10M + 2M)/2M ) = 0.6v
-// SLEEPING 900+   220+  ( vbatt ) = 3.6v - 4.2v
+// DONE     350+   115+  ( vbatt(4.2v) / (10M + 1M)/1M ) => 0.38v
+// CHARGING 550+   180+  ( vbatt(3.6v+) / (10M + 2M)/2M ) => 0.6v
+// SLEEPING 900+   220+  ( vbatt ) => 3.6v -> 4.2v
 boolean solarCharging()
 {
     int16_t solar = analogRead(SOLAR);
     Serial.print (F("solar analog: "));
     Serial.println (solar);
-    return ( solar > 180 && solar <= 220 );     // 3.3v analogue ref
-    //return ( solar > 550 && solar <= 900 );   // 1.1v analogue ref
+    return ( solar > 180 && solar <= 220 );  // 3.3v analogue ref
 }
 
 
@@ -1040,6 +1045,7 @@ boolean ews1294Post2 (int16_t streamHeight, boolean solar, uint16_t voltage)
     fona.sendCheckReply (F("AT+HTTPINIT"), OK);
     //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
     fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
+
     fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
@@ -1051,6 +1057,8 @@ boolean ews1294Post2 (int16_t streamHeight, boolean solar, uint16_t voltage)
               voltage,
               now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second()
         );
+        if (fona.HTTP_POST_start ("ews1294.info/api/v1/sensorapi", F("application/x-www-form-urlencoded"), post_data, strlen(post_data), &status_code, &response_length)) {
+
 
     // Note the data_source should match the last element of the url,
     // which must be a valid data_source
@@ -1501,9 +1509,15 @@ boolean firmwareGet(void)
         {
           fileClose();
           return true;
+        } else {
+          error = 3;
         }
+      } else {
+        error = 2;
       }
     }
+  } else {
+    error = 1;
   }
   fileClose();
   Serial.println(F("fona copy failed"));
@@ -1523,8 +1537,13 @@ void reflash (void) {
 }
 
 
+
+
+
+
+#define TESTPHONE "+855969101010"
 void smsSend() {
-  fona.sendSMS("+855969101010", "hello from tepmachcha");
+  fona.sendSMS(TESTPHONE, "hello from tepmachcha");
 }
 
 
