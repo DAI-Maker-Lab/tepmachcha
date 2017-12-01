@@ -23,7 +23,6 @@
 #define KEY4          0x0d0e0f00
 #endif
 
-
 #define SENSOR_HEIGHT  500  //  Height of top of octagonal gasket from streambed, in cm
 #define UTCOFFSET        7  //  Local standard time variance from UTC
 #define XBEEWINDOWSTART 14  //  Hour to turn on XBee for programming window
@@ -47,7 +46,8 @@
 #define RTCINTA 0    //  RTC INTA
 #define RTCINTB 1    //  RTC INTB
 
-#define RTCPIN   2  //  Onboard Stalker RTC pin
+// carrier 1
+#define RTCINT1  2  //  Onboard Stalker RTC pin
 #define FONA_RST 3  //  FONA RST pin
 #define SD_POWER 4  //  optional power to SD card
 #define BEEPIN   5  //  XBee power pin
@@ -61,6 +61,24 @@
 #define FONA_PS  A3 //  FONA power status pin
 #define SOLAR    A6 //  Solar level
 #define BATT     A7 //  Battery level
+
+// carrier 2
+#define RTCINT1  2  //  Onboard Stalker RTC pin
+#define WATCHDOG 3  //  (RTCPIN 2) low to reset
+#define FONA_RST A1 //  FONA RST pin
+#define SD_POWER 4  //  optional power to SD card
+#define BEEPIN   5  //  XBee power pin
+#define FONA_RX  6  //  UART pin into FONA
+#define PING     A0  //  Sonar ping pin
+#define RANGE    8  //  Sonar range pin -- pull low to turn off sonar
+#define FONA_TX  7  //  UART pin from FONA
+
+#define FONA_RTS na //  FONA RTS pin - check
+#define FONA_KEY A2 //  FONA Key pin
+#define FONA_PS  A3 //  FONA power status pin
+#define SOLAR    A6 //  Solar level
+#define BATT     A7 //  Battery level
+
 
 static const char OK_STRING[] PROGMEM = "OK";
 #define OK ((__FlashStringHelper*)OK_STRING)
@@ -76,7 +94,7 @@ boolean noSMS = false;          //  Flag to turn off SMS checking -- for future 
 boolean timeReset = false;      //  Flag indicating whether midnight time reset has already occurred
 byte beeShutoffHour = 0;        //  Hour to turn off manual power to XBee
 byte beeShutoffMinute = 0;      //  Minute to turn off manual power to XBee
-char method = 0;                //  Method of clock set, for debugging
+char method;                    //  Method of clock set, for debugging
 uint8_t error;
 
 //static boolean testmenu = 0;
@@ -115,6 +133,7 @@ void setup (void)
 		Serial.println (F("mV"));
 
     // Set output pins (default is input)
+		//pinMode (WATCHDOG, OUTPUT);
 		pinMode (BEEPIN, OUTPUT);
 		pinMode (RANGE, OUTPUT);
 		pinMode (FONA_KEY, OUTPUT);
@@ -125,6 +144,7 @@ void setup (void)
 		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
 		interrupts();
 
+    //digitalWrite (WATCHDOG, HIGH);        //  watchdog switch pullup
     digitalWrite (RANGE, LOW);           //  sonar off
 		digitalWrite (SD_POWER, HIGH);       //  SD card off
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
@@ -189,7 +209,7 @@ void setup (void)
 
 void loop (void)
 {
-#ifndef DEBUG
+//#ifndef DEBUG
     /*
     if (Serial.read() == '?') testmenu = true;
     if (testmenu) {
@@ -199,7 +219,7 @@ void loop (void)
     */
     //test();
     //return;
-#endif
+//#endif
 
 		now = RTC.now();      //  Get the current time from the RTC
 
@@ -213,6 +233,7 @@ void loop (void)
 	   *	this is 50cm. This is also what would happen if something were to block the unit -- a
 	   *	plastic bag that blew onto the enclosure, for example. We very much want to avoid false
 	   *	positive alerts, so we will ignore anything less than 55cm from the sensor. 
+11.533722,104.911377
      *
      */
 
@@ -870,14 +891,10 @@ void smsCheck (void)
               fonaOn();                      // try again
               status = firmwareGet();
             }
-            if (!status)
-            {
-              status = error;
-            }
 
-            sprintf_P(smsBuffer, (prog_char *)F("fwGet %s (%d) status: %d, crc: %d"), \
-              file_name, file_size, status, status);
-            fona.sendSMS(smsSender, smsBuffer);  // return file stat, statuss
+            sprintf_P(smsBuffer, (prog_char *)F("fwGet %s (%d) status: %d, error: %d, crc: %d"), \
+              file_name, file_size, status, error, 0);
+            fona.sendSMS(smsSender, smsBuffer);  // return file stat, status
         }
 
         // FLASHPASSWD <filename>
@@ -1185,7 +1202,8 @@ boolean fileInit(void)
   }
   
   // initialize FAT16 volume
-  if (!Fat16::init(&card))
+  // if (!Fat16::init(&card)) // JACK
+  if (!Fat16::init(&card, 1))
   {
 	  Serial.println(F("Fat16::init failed"));
 	  return false;
@@ -1197,7 +1215,6 @@ boolean fileInit(void)
 
 boolean fileOpen(uint8_t mode)
 {
-
   Serial.print(F("opening file (mode 0x"));
   Serial.print(mode, HEX);
   Serial.print(F("):"));
@@ -1445,7 +1462,7 @@ boolean ftpGet(void)
   fona.sendCheckReply (F("AT+FTPSERV=\"" FTPSERVER "\""), OK);
   fona.sendCheckReply (F("AT+FTPUN=\"" FTPUSER "\""), OK);
   fona.sendCheckReply (F("AT+FTPPW=\"" FTPPW "\""), OK);
-  fona.sendCheckReply (F("AT+FTPGETPATH=\"/home/ftpuser/files/\""), OK);
+  fona.sendCheckReply (F("AT+FTPGETPATH=\"" FTPPATH "\""), OK);
 
   // remote filename
   Serial.print(F("AT+FTPGETNAME=\""));
@@ -1537,15 +1554,9 @@ void reflash (void) {
 }
 
 
-
-
-
-
-#define TESTPHONE "+855969101010"
 void smsSend() {
   fona.sendSMS(TESTPHONE, "hello from tepmachcha");
 }
-
 
 int freeRam (void) {
   extern int __heap_start, *__brkval; 
@@ -1648,6 +1659,7 @@ void test(void)
     }
     case 'c': {
       if ( !(fileInit() && fileOpenWrite()) ) {
+        Serial.print(F("open file failed\n"));
         break;
       }
       boolean s = fonaFileCopy(file_size);
@@ -1667,8 +1679,8 @@ void test(void)
       break;
     }
     case 'X': {
-      file_size = 29758;
-      strcpy_P(file_name, (prog_char*)F("FIRM.BIN"));
+      file_size = 25874;
+      strcpy_P(file_name, (prog_char*)F("EWS.BIN"));
       break;
     }
     case 'r': {
