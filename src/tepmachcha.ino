@@ -1,5 +1,5 @@
 //  Tepmachcha version number
-#define VERSION "1.1.3"
+#define VERSION "1.2.0"
 
 //  Customize these items for each installation
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -14,7 +14,7 @@
 #define FTPSERVER     "FTP SERVER"
 #define FOTAPASSWORD  "FOTA_PASSWORD"  // Password to trigger FOTA update
 #define FLASHPASSWORD "FLASH_PASSWORD" // Password to flash app from SD file
-#define PINGPASSWORD  "PING_PASSWORD"  // Password to send ping sms
+#define PINGPASSWORD  "PING_PASSWORD"  //  Password to return info/status sms
 #define BEEPASSWORD   "XBEE_PASSWORD"  // Password to turn on XBee by SMS
 #define APN           "FONAapn"
 #define KEY1          0x01020304       // Encryption key 128 bits
@@ -27,7 +27,7 @@
 #define UTCOFFSET        7  //  Local standard time variance from UTC
 #define XBEEWINDOWSTART 14  //  Hour to turn on XBee for programming window
 #define XBEEWINDOWEND   17  //  Hour to turn off XBee
-#define INTERVAL         5  //  Number of minutes between readings
+#define INTERVAL        3  //  Number of minutes between readings
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 #include <DS1337.h>           //  For the Stalker's real-time clock (RTC)
@@ -83,6 +83,10 @@
 static const char OK_STRING[] PROGMEM = "OK";
 #define OK ((__FlashStringHelper*)OK_STRING)
 
+//#static const char DEVICE_STRING[] PROGMEM = "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " EWSID:" EWSDEVICE_ID;
+//##define DEVICE ((__FlashStringHelper*)DEVICE_STRING)
+#define DEVICE "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " EWSID:" EWSDEVICE_ID
+
 // call into bootloader jumptable at top of flash
 #define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
 #define flash_firmware (*((void(*)(const char *))(0x7ffc/2)))
@@ -123,7 +127,8 @@ void setup (void)
 
     // Compile-in the date and time; helps identify software uploads
 		// Note: C compiler concatenates adjacent strings
-		Serial.println (F("Tepmachcha v" VERSION " " __DATE__ " " __TIME__));
+		//Serial.println (F("Tepmachcha v" VERSION " " __DATE__ " " __TIME__));
+		Serial.println (F(DEVICE));
 
 		analogReference(DEFAULT); // stalkerv3: DEFAULT=3.3V, INTERNAL=1.1V, EXTERNAL=3.3V
     analogRead(BATT);         // must read once after changing reference
@@ -210,13 +215,6 @@ void setup (void)
 void loop (void)
 {
 //#ifndef DEBUG
-    /*
-    if (Serial.read() == '?') testmenu = true;
-    if (testmenu) {
-      test();
-      return;
-    }
-    */
     //test();
     //return;
 //#endif
@@ -233,7 +231,6 @@ void loop (void)
 	   *	this is 50cm. This is also what would happen if something were to block the unit -- a
 	   *	plastic bag that blew onto the enclosure, for example. We very much want to avoid false
 	   *	positive alerts, so we will ignore anything less than 55cm from the sensor. 
-11.533722,104.911377
      *
      */
 
@@ -566,14 +563,14 @@ char fonaRead(void)
 }
 
 
-void fonaPowerOn(void)
+void fonaToggle(boolean state)
 {
-  if (digitalRead (FONA_PS) == LOW)  //  If the FONA is off
+  if (digitalRead (FONA_PS) == state)  //  If the FONA is off
   {
     digitalWrite(FONA_KEY, HIGH);    //  KEY should be high to start
 
-    Serial.print (F("FONA poweron .. "));
-    while (digitalRead (FONA_PS) == LOW) 
+    Serial.print (F("FONA toggle .. "));
+    while (digitalRead (FONA_PS) == state) 
     {
       digitalWrite(FONA_KEY, LOW);   //  pulse the Key pin low
       wait (500);
@@ -581,6 +578,15 @@ void fonaPowerOn(void)
     digitalWrite (FONA_KEY, HIGH);   //  and then return it to high
     Serial.println(F(" done."));
   }
+}
+
+boolean fonaPowerOn(void)
+{
+  if (digitalRead (FONA_PS) == LOW)  //  If the FONA is off
+  {
+    fonaToggle(LOW);
+  }
+  return (digitalRead(FONA_PS) == HIGH);
 }
 
 
@@ -689,6 +695,10 @@ void fonaOff (void)
   {
     fona.sendCheckReply (F("AT+CPOWD=1"), OK); //  send shutdown command
     digitalWrite (FONA_KEY, HIGH);             //  and set Key high
+    if (digitalRead (FONA_PS) == HIGH)         //  If the FONA is still on
+    {
+      fonaToggle(HIGH);
+    }
   }
 }
 
@@ -905,8 +915,16 @@ void smsCheck (void)
             reflash();
         }
 
+        // PINGPASSWORD
+				if (strcmp_P(smsBuffer, (prog_char*)F(PINGPASSWORD)) == 0)        //  PING password...
+        {
+            sprintf_P(smsBuffer, (prog_char *)F(DEVICE " volt: %d, solar: %d range: %d"), \
+              batteryRead(), solarCharging(), takeReading());
+            fona.sendSMS(smsSender, smsBuffer);
+        }
+
         // BEEPASSWORD
-				if (strcmp_P (smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
+				if (strcmp_P(smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
 				{
             //  ...determine the appropriate shutoff time and turn on the XBee until then
             beeShutoffHour = (now.hour() + 1);   // We'll leave the XBee on for 1 hour
