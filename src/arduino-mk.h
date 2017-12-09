@@ -7,6 +7,7 @@
  * there may be a new arduino-preproc command that uses ctags - investigate
  */
 #include <Arduino.h>
+#include "secrets.h" // override config.h template defs
 
 void setup(void);
 void loop(void);
@@ -17,7 +18,7 @@ void fonaFlush(void);
 char fonaRead(void);
 boolean fonaOn(void);
 void fonaOff(void);
-int takeReading(void);
+int16_t takeReading(void);
 int mode(int*, int);
 void checkSMS(void);
 boolean sendReading (int);
@@ -27,7 +28,7 @@ uint16_t batteryRead(void);
 void eepromWrite(void);
 boolean fonaSendCheckOK(const __FlashStringHelper*);
 boolean ftpGet(void);
-void fonaPowerOn(void);
+boolean fonaPowerOn(void);
 boolean fonaSerialOn(void);
 void smsDeleteAll(void);
 void smsCheck (void);
@@ -42,6 +43,6 @@ extern char file_name[];
 extern uint16_t file_size;
 boolean sendReading(uint16_t);
 void reflash (void);
+boolean ews1294Post (int, boolean, uint16_t);
+uint16_t fonaBattery(void);
 
-
-#define DEBUG_RAM     ram();
