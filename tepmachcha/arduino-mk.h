@@ -11,7 +11,7 @@
 
 void setup(void);
 void loop(void);
-void upload(int);
+void upload();
 void wait(unsigned long);
 void clockSet(void);
 void fonaFlush(void);

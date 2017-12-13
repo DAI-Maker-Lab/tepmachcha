@@ -2,6 +2,7 @@
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 #ifndef SECRETS
+
 #define APN           "FONAapn"
 #define DMISSENSOR_ID "DMIS sensor id"
 #define DMISAPIBEARER "YOUR_BEARER_ID"
@@ -18,11 +19,12 @@
 #define KEY2          0x05060708
 #define KEY3          0x090a0b0c
 #define KEY4          0x0d0e0f00
-#endif
 
 #define SENSOR_HEIGHT  500  //  Height of top of octagonal gasket from streambed, in cm
 #define UTCOFFSET        7  //  Local standard time variance from UTC
 #define XBEEWINDOWSTART 14  //  Hour to turn on XBee for programming window
 #define XBEEWINDOWEND   17  //  Hour to turn off XBee
 #define INTERVAL        15  //  Number of minutes between readings
+
+#endif
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 

@@ -1,5 +1,6 @@
 AVRDUDE_ARD_BAUDRATE = 57600
 ARDUINO_PORT = /dev/tty.SLAB_USBtoUART
+ARDUINO_PORT = /dev/tty.usbserial-*
 #ARDUINO_PORT = /dev/tty.usbserial-AL008MNM
 #AVRDUDE_OPTS = -V -v -v -v -v
 #ISP =1						# Use the ISP porgramer options

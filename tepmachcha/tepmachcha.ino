@@ -2,6 +2,7 @@
 #define VERSION "1.2.0"
 
 //  Customize this for each installation
+#include "secrets.h"
 #include "config.h"           //  Site configuration
 
 #include <DS1337.h>           //  For the Stalker's real-time clock (RTC)
@@ -61,7 +62,13 @@ static const char OK_STRING[] PROGMEM = "OK";
 
 //#static const char DEVICE_STRING[] PROGMEM = "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " EWSID:" EWSDEVICE_ID;
 //##define DEVICE ((__FlashStringHelper*)DEVICE_STRING)
-#define DEVICE "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " EWSID:" EWSDEVICE_ID
+
+// Device string includes date and time; helps identify version
+// Note: C compiler concatenates adjacent strings
+#define DEVICE "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " ID:" EWSDEVICE_ID
+
+#define STR_EXPAND(tok) #tok
+#define STR(tok) STR_EXPAND(tok)
 
 // call into bootloader jumptable at top of flash
 #define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
@@ -77,7 +84,14 @@ byte beeShutoffMinute = 0;      //  Minute to turn off manual power to XBee
 char method;                    //  Method of clock set, for debugging
 uint8_t error;
 
+// File
+const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
+SdCard card;
+Fat16 file;
+char file_name[13];
+uint16_t file_size;
 //static boolean testmenu = 0;
+
 
 DateTime now;
 
@@ -101,9 +115,6 @@ void setup (void)
 		Serial.begin (57600); // Begin debug serial
     fonaSerial.begin (4800); //  Open a serial interface to FONA
 
-    // Compile-in the date and time; helps identify software uploads
-		// Note: C compiler concatenates adjacent strings
-		//Serial.println (F("Tepmachcha v" VERSION " " __DATE__ " " __TIME__));
 		Serial.println (F(DEVICE));
 
 		analogReference(DEFAULT); // stalkerv3: DEFAULT=3.3V, INTERNAL=1.1V, EXTERNAL=3.3V
@@ -202,18 +213,10 @@ void loop (void)
 		Serial.println (now.minute());
 
 
-		/*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
-	   *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
-	   *	this is 50cm. This is also what would happen if something were to block the unit -- a
-	   *	plastic bag that blew onto the enclosure, for example. We very much want to avoid false
-	   *	positive alerts, so we will ignore anything less than 55cm from the sensor. 
-     *
-     */
-
 		//if (now.minute() % INTERVAL == 0 && !sentData)   //  If it is time to send a scheduled reading...
 		if (now.minute() % INTERVAL == 0)   //  If it is time to send a scheduled reading...
 		{
-				upload (takeReading());
+				upload ();
     }
 		//} else { sentData = false };
 
@@ -270,13 +273,28 @@ void loop (void)
 }
 
 
-void upload(int streamHeight)
+void upload()
 {
 		if (fonaOn())
     {
 
-      ews1294Post(streamHeight, solarCharging(), fonaBattery());
+      /*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
+       *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
+       *	this is 50cm. This is also what would happen if something were to block the unit -- a
+       *	plastic bag that blew onto the enclosure, for example. We very much want to avoid false
+       *	positive alerts, so we will ignore anything less than 55cm from the sensor. 
+       *
+       */
+      int streamHeight = takeReading();
+      uint8_t status = ews1294Post(streamHeight, solarCharging(), fonaBattery());
       //sentData = ews1294Post(streamHeight, solarCharging(), fonaBattery());
+
+      // reset fona if upload failed
+      if (!status)
+      {
+        fonaOff();
+        fonaOn();
+      }
 
       if (noSMS == false)
       {
@@ -300,7 +318,6 @@ void upload(int streamHeight)
       }
       
     }
-
 		fonaOff();
 }
 
@@ -541,6 +558,8 @@ char fonaRead(void)
 
 void fonaToggle(boolean state)
 {
+  uint32_t timeout = millis() + 5000;
+
   if (digitalRead (FONA_PS) == state)  //  If the FONA is off
   {
     digitalWrite(FONA_KEY, HIGH);    //  KEY should be high to start
@@ -550,8 +569,10 @@ void fonaToggle(boolean state)
     {
       digitalWrite(FONA_KEY, LOW);   //  pulse the Key pin low
       wait (500);
+      digitalWrite (FONA_KEY, HIGH); //  and then return it to high
+      if (millis() > timeout)
+        break;
     }
-    digitalWrite (FONA_KEY, HIGH);   //  and then return it to high
     Serial.println(F(" done."));
   }
 }
@@ -878,7 +899,7 @@ void smsCheck (void)
               status = firmwareGet();
             }
 
-            sprintf_P(smsBuffer, (prog_char *)F("fwGet %s (%d) status: %d, error: %d, crc: %d"), \
+            sprintf_P(smsBuffer, (prog_char *)F("ftp %s (%d) stat:%d, err:%d, crc:%d"), \
               file_name, file_size, status, error, 0);
             fona.sendSMS(smsSender, smsBuffer);  // return file stat, status
         }
@@ -894,7 +915,7 @@ void smsCheck (void)
         // PINGPASSWORD
 				if (strcmp_P(smsBuffer, (prog_char*)F(PINGPASSWORD)) == 0)        //  PING password...
         {
-            sprintf_P(smsBuffer, (prog_char *)F(DEVICE " volt: %d, solar: %d range: %d"), \
+            sprintf_P(smsBuffer, (prog_char *)F(DEVICE " v:%d c:%d h:%d/" STR(SENSOR_HEIGHT)), \
               batteryRead(), solarCharging(), takeReading());
             fona.sendSMS(smsSender, smsBuffer);
         }
@@ -1177,11 +1198,7 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 }
 
 
-const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
-SdCard card;
-Fat16 file;
-char file_name[13];
-uint16_t file_size;
+
 
 boolean fileInit(void)
 {
@@ -1269,7 +1286,7 @@ void xoff(void)
 
 
 //const static uint32_t key[4] = {
-const static PROGMEM prog_uint32_t key[4] = {
+const static PROGMEM uint32_t key[4] = {
   KEY1, KEY2, KEY3, KEY4
 };
 
@@ -1340,7 +1357,7 @@ boolean fileDecrypt() {
 }
 
 
-const static PROGMEM prog_uint32_t crc_table[16] = {
+const static PROGMEM uint32_t crc_table[16] = {
     0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
     0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
     0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
@@ -1854,7 +1871,7 @@ void test(void)
       break;
     }
     case 'u': {
-      upload(100);
+      upload();
       break;
     }
   }
