@@ -47,6 +47,7 @@
 #define PING     A0  //  Sonar ping pin
 #define RANGE    8  //  Sonar range pin -- pull low to turn off sonar
 #define FONA_TX  7  //  UART pin from FONA
+#define BUS_PWR  9  //  Peripheral bus power for 3.1
 
 #define FONA_RTS na //  FONA RTS pin - check
 #define FONA_KEY A2 //  FONA Key pin
@@ -130,6 +131,9 @@ void setup (void)
 		pinMode (FONA_KEY, OUTPUT);
 		pinMode (FONA_RX, OUTPUT);
 		pinMode (SD_POWER, OUTPUT);
+#ifdef BUS_PWR
+		pinMode (BUS_PWR, OUTPUT);
+#endif
 
     // Set RTC interrupt handler
 		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
@@ -164,10 +168,6 @@ void setup (void)
 
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		fonaOn();
-
-
-
-
 
     // set ext. audio, to prevent crash on incoming calls
     // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
@@ -286,10 +286,9 @@ void upload()
       /*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
        *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
        *	this is 50cm. This is also what would happen if something were to block the unit -- a
-       *	plastic bag that blew onto the enclosure, for example. We very much want to avoid false
-       *	positive alerts, so we will ignore anything less than 55cm from the sensor. 
-       *
+       *	plastic bag that blew onto the enclosure, for example.
        */
+
       int streamHeight = takeReading();
       uint8_t status = ews1294Post(streamHeight, solarCharging(), fonaBattery());
       //sentData = ews1294Post(streamHeight, solarCharging(), fonaBattery());
@@ -533,34 +532,6 @@ void XBeeOff (void)
 }
 
 
-void fonaFlush (void)
-{
-  // Read all available serial input from FONA to flush any pending data.
-  while(fona.available())
-  {
-    char c = fona.read();
-    loop_until_bit_is_set (UCSR0A, UDRE0); 
-    UDR0 = c;
-  }
-}
-
-
-char fonaRead(void)
-{
-  // read from fona, waiting up to <timeout> ms for something at arrive
-  uint32_t timeout = millis() + 1000;
-
-  while(!fona.available())
-  {
-    if (millis() > timeout)
-      break;
-    else
-      delay(1);
-  }
-  return fona.read();
-}
-
-
 void fonaToggle(boolean state)
 {
   uint32_t timeout = millis() + 5000;
@@ -582,8 +553,36 @@ void fonaToggle(boolean state)
   }
 }
 
+
+void fonaOff (void)
+{
+  wait (5000);        // Shorter delays yield unpredictable results
+  fonaGPRSOff();      // turn GPRS off first, for an orderly shutdown
+
+  wait (500);
+
+  if (digitalRead (FONA_PS) == HIGH)           //  If the FONA is on
+  {
+    fona.sendCheckReply (F("AT+CPOWD=1"), OK); //  send shutdown command
+    digitalWrite (FONA_KEY, HIGH);             //  and set Key high
+    if (digitalRead (FONA_PS) == HIGH)         //  If the FONA is still on
+    {
+      fonaToggle(HIGH);
+    }
+  }
+#ifdef BUS_PWR
+  digitalWrite (BUS_PWR, LOW);           //  Peripheral bus on
+#endif
+}
+
+
+
 boolean fonaPowerOn(void)
 {
+#ifdef BUS_PWR
+  digitalWrite (BUS_PWR, HIGH);           //  Peripheral bus on
+  wait(1000);
+#endif
   if (digitalRead (FONA_PS) == LOW)  //  If the FONA is off
   {
     fonaToggle(LOW);
@@ -686,22 +685,31 @@ boolean fonaOn()
 }
 
 
-void fonaOff (void)
+void fonaFlush (void)
 {
-  wait (5000);        // Shorter delays yield unpredictable results
-  fonaGPRSOff();      // turn GPRS off first, for an orderly shutdown
-
-  wait (500);
-
-  if (digitalRead (FONA_PS) == HIGH)           //  If the FONA is on
+  // Read all available serial input from FONA to flush any pending data.
+  while(fona.available())
   {
-    fona.sendCheckReply (F("AT+CPOWD=1"), OK); //  send shutdown command
-    digitalWrite (FONA_KEY, HIGH);             //  and set Key high
-    if (digitalRead (FONA_PS) == HIGH)         //  If the FONA is still on
-    {
-      fonaToggle(HIGH);
-    }
+    char c = fona.read();
+    loop_until_bit_is_set (UCSR0A, UDRE0); 
+    UDR0 = c;
   }
+}
+
+
+char fonaRead(void)
+{
+  // read from fona, waiting up to <timeout> ms for something at arrive
+  uint32_t timeout = millis() + 1000;
+
+  while(!fona.available())
+  {
+    if (millis() > timeout)
+      break;
+    else
+      delay(1);
+  }
+  return fona.read();
 }
 
 
@@ -956,6 +964,7 @@ void smsCheck (void)
 				if (millis() >= timeOut)
 				{
           smsDeleteAll();
+          break;
 				}
 		}
 }

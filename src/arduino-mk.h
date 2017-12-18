@@ -16,6 +16,7 @@ void wait(unsigned long);
 void clockSet(void);
 void fonaFlush(void);
 char fonaRead(void);
+void fonaGPRSOff(void);
 boolean fonaOn(void);
 void fonaOff(void);
 int16_t takeReading(void);
