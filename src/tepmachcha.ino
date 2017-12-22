@@ -1,5 +1,5 @@
 //  Tepmachcha version number
-#define VERSION "1.2.0"
+#define VERSION "1.2.1"
 
 //  Customize this for each installation
 #include "config.h"           //  Site configuration
@@ -60,13 +60,6 @@
 static const char OK_STRING[] PROGMEM = "OK";
 #define OK ((__FlashStringHelper*)OK_STRING)
 
-//#static const char DEVICE_STRING[] PROGMEM = "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " ID:" EWSDEVICE_ID;
-//##define DEVICE ((__FlashStringHelper*)DEVICE_STRING)
-
-// Device string includes date and time; helps identify version
-// Note: C compiler concatenates adjacent strings
-#define DEVICE "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " ID:" EWSDEVICE_ID
-
 #define STR_EXPAND(tok) #tok
 #define STR(tok) STR_EXPAND(tok)
 
@@ -74,6 +67,13 @@ static const char OK_STRING[] PROGMEM = "OK";
 #define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
 #define flash_firmware (*((void(*)(const char *))(0x7ffc/2)))
 #define EEPROM_FILENAME_ADDR (E2END - 1)
+
+// Device string includes date and time; helps identify version
+// Note: C compiler concatenates adjacent strings
+//#define DEVICE "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " ID:" EWSDEVICE_ID " " STR(STREAM_HEIGHT) "cm"
+#define DEVICE "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " ID:" EWSDEVICE_ID
+//#static const char DEVICE_STRING[] PROGMEM = "Tepmachcha v" VERSION " " __DATE__ " " __TIME__ " ID:" EWSDEVICE_ID;
+//##define DEVICE ((__FlashStringHelper*)DEVICE_STRING)
 
 boolean sentData = false;
 boolean smsPower = false;       //  Manual XBee power flag
