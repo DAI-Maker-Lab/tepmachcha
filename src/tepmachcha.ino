@@ -1,5 +1,5 @@
 //  Tepmachcha version number
-#define VERSION "1.2.1"
+#define VERSION "1.2.2"
 
 //  Customize this for each installation
 #include "config.h"           //  Site configuration
@@ -125,7 +125,6 @@ void setup (void)
 		Serial.println (F("mV"));
 
     // Set output pins (default is input)
-		//pinMode (WATCHDOG, OUTPUT);
 		pinMode (BEEPIN, OUTPUT);
 		pinMode (RANGE, OUTPUT);
 		pinMode (FONA_KEY, OUTPUT);
@@ -139,11 +138,13 @@ void setup (void)
 		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
 		interrupts();
 
-    //digitalWrite (WATCHDOG, HIGH);        //  watchdog switch pullup
     digitalWrite (RANGE, LOW);           //  sonar off
 		digitalWrite (SD_POWER, HIGH);       //  SD card off
 		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
     digitalWrite (BEEPIN, LOW);          //  XBee on
+#ifdef BUS_PWR
+    digitalWrite (BUS_PWR, HIGH);        //  Peripheral bus on
+#endif
 
 
 		/*  If the voltage at startup is less than 3.5V, we assume the battery died in the field
@@ -160,6 +161,9 @@ void setup (void)
 				Serial.flush();
 				digitalWrite (BEEPIN, HIGH);      //  Make sure XBee is powered off
 				digitalWrite (RANGE, LOW);        //  Make sure sonar is off
+#ifdef BUS_PWR
+        //digitalWrite (BUS_PWR, LOW);   //  Peripheral bus off
+#endif
 				RTC.enableInterrupts (EveryHour); //  We'll wake up once an hour
 				RTC.clearINTStatus();             //  Clear any outstanding interrupts
 				sleep.pwrDownMode();                    //  Set sleep mode to Power Down
@@ -167,19 +171,20 @@ void setup (void)
 		}
 
 		// We will use the FONA to get the current time to set the Stalker's RTC
-		fonaOn();
+		if (fonaOn())
+    {
 
-    // set ext. audio, to prevent crash on incoming calls
-    // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
-    fona.sendCheckReply(F("AT+CHFA=1"), OK);
+      // set ext. audio, to prevent crash on incoming calls
+      // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
+      fona.sendCheckReply(F("AT+CHFA=1"), OK);
 
-		clockSet();
-		
-		// Delete any accumulated SMS messages to avoid interference from old commands
 #ifndef DEBUG
-    smsDeleteAll();
+      // Delete any accumulated SMS messages to avoid interference from old commands
+      smsDeleteAll();
 #endif
-		
+
+      clockSet();
+    }
     fonaOff();
 
 		now = RTC.now();    //  Get the current time from the RTC
@@ -210,6 +215,10 @@ void loop (void)
     //test();
     //return;
 //#endif
+
+#ifdef BUS_PWR
+    //digitalWrite (BUS_PWR, HIGH);           //  Peripheral bus on
+#endif
 
 		now = RTC.now();      //  Get the current time from the RTC
 
@@ -270,6 +279,9 @@ void loop (void)
 		Serial.println(F("sleeping"));
 		Serial.flush();                         //  Flush any output before sleep
 
+#ifdef BUS_PWR
+    //digitalWrite (BUS_PWR, LOW);           //  Peripheral bus off
+#endif
 		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
 		//sleep.adcMode();
 		//sleep.idleMode();
@@ -570,19 +582,12 @@ void fonaOff (void)
       fonaToggle(HIGH);
     }
   }
-#ifdef BUS_PWR
-  digitalWrite (BUS_PWR, LOW);           //  Peripheral bus on
-#endif
 }
 
 
 
 boolean fonaPowerOn(void)
 {
-#ifdef BUS_PWR
-  digitalWrite (BUS_PWR, HIGH);           //  Peripheral bus on
-  wait(1000);
-#endif
   if (digitalRead (FONA_PS) == LOW)  //  If the FONA is off
   {
     fonaToggle(LOW);
@@ -673,15 +678,18 @@ void fonaGPRSOff(void) {
 
 boolean fonaOn()
 {
-  fonaPowerOn();
-  if (fonaSerialOn())
+  if (fonaPowerOn())
   {
-    Serial.print (F("FONA online. "));
-    if ( fonaGSMOn() )
+    if (fonaSerialOn())
     {
-      return fonaGPRSOn();
+      Serial.print (F("FONA online. "));
+      if ( fonaGSMOn() )
+      {
+        return fonaGPRSOn();
+      }
     }
   }
+  return false;
 }
 
 
@@ -723,15 +731,16 @@ uint16_t fonaBattery(void) {
 }
 
 
+#define SAMPLES 11
 int16_t takeReading (void)
 {
 		//  We will take the mode of seven samples to try to filter spurious readings
-		int16_t sample[] = {0, 0, 0, 0, 0, 0, 0};   //  Initial sample values
+		int16_t sample[SAMPLES];
 		
     digitalWrite (RANGE, HIGH);           //  sonar on
     wait (1000);
 
-		for (uint8_t sampleCount = 0; sampleCount < 7; sampleCount++)
+		for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
 		{
 				sample[sampleCount] = pulseIn (PING, HIGH);
 				Serial.print (F("Sample "));
@@ -741,7 +750,7 @@ int16_t takeReading (void)
 				wait (50);
 		}
 
-		int16_t sampleMode = mode (sample, 7);
+		int16_t sampleMode = mode2 (sample, SAMPLES);
 
 		int16_t streamHeight = (SENSOR_HEIGHT - (sampleMode / 10)); //  1 µs pulse = 1mm distance
 
@@ -757,18 +766,62 @@ int16_t takeReading (void)
 }
 
 
-int mode (int *x, int n)    
+int16_t mode2 (int16_t *x, uint8_t n)
+{
+    uint8_t counts[n];
+
+    for (int i = 0 ; i < n; i++)
+    {
+      for (int j = 0 ; j < n ; j++)
+      {
+        if (x[j] && x[j] == x[i])
+        {
+          counts[i]++;
+          if (i != j) x[j] = 0;
+        }
+      }
+    }
+
+    uint8_t m = 0;
+    for (int i = 0 ; i < n; i++)
+    {
+      if (counts[i] > counts[m]) m = i;
+    }
+    return x[m];
+}
+
+
+// sort (Author: Bill Gentles, Nov. 12, 2010)
+void isort(int16_t *a, uint8_t n) {
+
+  for (uint8_t i = 1; i < n; ++i)
+  {
+
+    uint16_t j = a[i];
+    uint8_t k;
+
+    for (k = i - 1; (k >= 0) && (j < a[k]); k--)
+    {
+      a[k + 1] = a[k];
+    }
+    a[k + 1] = j;
+  }
+}
+
+
+int16_t mode (int16_t *x, uint8_t n)    
 /*   Calculate the mode of an array of readings
  *   From http://playground.arduino.cc/Main/MaxSonar
  */   
 {
-		int i = 0;
-		int count = 0;
-		int maxCount = 0;
-		int mode = 0;
-	  
-		int bimodal;
-		int prevCount = 0;
+		uint8_t i = 0;
+		uint8_t count = 0;
+		uint8_t maxCount = 0;
+		uint16_t mode = 0;
+    uint8_t prevCount = 0;
+		boolean bimodal;
+
+		isort (x, n);
 		while(i < (n - 1))
 		{
 				prevCount = count;
@@ -791,18 +844,18 @@ int mode (int *x, int n)
 				        i++;
 				}
 				
-				if(count == maxCount)     //  If the dataset has 2 or more modes
+				if(count == maxCount)     // If the dataset has 2 or more modes
 				{
 				        bimodal = 1;
 				}
+    }
 				
-				if(mode == 0 || bimodal == 1)   //  Return the median if no mode
-				{
-				        mode = x[(n / 2)];
-				}
-				
-				return mode;
-		}
+    if(mode == 0 || bimodal == 1) // Return the median if no mode
+    {
+            mode = x[(n / 2)];
+    }
+
+    return mode;
 }
 
 
