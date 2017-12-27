@@ -39,7 +39,7 @@
 
 // carrier 2
 #define RTCINT1  2  //  Onboard Stalker RTC pin
-#define WATCHDOG 3  //  (RTCPIN 2) low to reset
+#define WATCHDOG 3  //  (RTCINT2) low to reset
 #define FONA_RST A1 //  FONA RST pin
 #define SD_POWER 4  //  optional power to SD card
 #define BEEPIN   5  //  XBee power pin
@@ -170,6 +170,7 @@ void setup (void)
 				sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 		}
 
+
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		if (fonaOn())
     {
@@ -185,9 +186,19 @@ void setup (void)
 
       clockSet();
     }
+    Serial.print(F("offing fona.. "));
     fonaOff();
+    Serial.print(F("off"));
 
+    wait(1000);
 		now = RTC.now();    //  Get the current time from the RTC
+
+    Serial.print(F("Watchdog at "));
+    Serial.print(now.hour());
+    Serial.print(':');
+    Serial.println(now.minute()+2);
+    wait(1000);
+    RTC.enableInterrupts2 (now.hour(), now.minute() + 2); // Set daily reset alarm 
 
 		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
 		RTC.clearINTStatus();                //  Clear any outstanding interrupts
@@ -226,7 +237,6 @@ void loop (void)
 		Serial.print (F(":"));
 		Serial.println (now.minute());
 
-
 		//if (now.minute() % INTERVAL == 0 && !sentData)   //  If it is time to send a scheduled reading...
 		if (now.minute() % INTERVAL == 0)   //  If it is time to send a scheduled reading...
 		{
@@ -234,8 +244,8 @@ void loop (void)
     }
 		//} else { sentData = false };
 
-		//  We will turn on the XBee radio for programming only within a specific
-		//  window to save power
+		// We will turn on the XBee radio for programming only within a specific
+		// window to save power
 		if (now.hour() >= XBEEWINDOWSTART && now.hour() <= XBEEWINDOWEND)
 		{
 				digitalWrite (BEEPIN, LOW);
@@ -546,18 +556,18 @@ void XBeeOff (void)
 
 void fonaToggle(boolean state)
 {
-  uint32_t timeout = millis() + 5000;
+  uint32_t timeout = millis() + 4000;
 
-  if (digitalRead (FONA_PS) == state)  //  If the FONA is off
+  if (digitalRead (FONA_PS) != state) // If FONA not in desired state
   {
-    digitalWrite(FONA_KEY, HIGH);    //  KEY should be high to start
+    digitalWrite(FONA_KEY, HIGH);     // KEY should be high to start
 
     Serial.print (F("FONA toggle .. "));
-    while (digitalRead (FONA_PS) == state) 
+    while (digitalRead (FONA_PS) != state) 
     {
-      digitalWrite(FONA_KEY, LOW);   //  pulse the Key pin low
+      digitalWrite(FONA_KEY, LOW);    // pulse the Key pin low
       wait (500);
-      digitalWrite (FONA_KEY, HIGH); //  and then return it to high
+      digitalWrite (FONA_KEY, HIGH);  // and then return it to high
       if (millis() > timeout)
         break;
     }
@@ -568,7 +578,8 @@ void fonaToggle(boolean state)
 
 void fonaOff (void)
 {
-  wait (5000);        // Shorter delays yield unpredictable results
+  //wait (5000);        // Shorter delays yield unpredictable results
+  wait (1000);
   fonaGPRSOff();      // turn GPRS off first, for an orderly shutdown
 
   wait (500);
@@ -579,7 +590,7 @@ void fonaOff (void)
     digitalWrite (FONA_KEY, HIGH);             //  and set Key high
     if (digitalRead (FONA_PS) == HIGH)         //  If the FONA is still on
     {
-      fonaToggle(HIGH);
+      fonaToggle(LOW);
     }
   }
 }
@@ -590,7 +601,7 @@ boolean fonaPowerOn(void)
 {
   if (digitalRead (FONA_PS) == LOW)  //  If the FONA is off
   {
-    fonaToggle(LOW);
+    fonaToggle(HIGH);
   }
   return (digitalRead(FONA_PS) == HIGH);
 }
