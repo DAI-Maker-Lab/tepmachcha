@@ -16,7 +16,7 @@
 // save RAM by reducing hw serial rcv buffer (default 64)
 // Note the XBee has a buffer of 100 bytes, but as we don't
 // receive much from XBee we can reduce the buffer.
-#define SERIAL_BUFFER_SIZE 16
+#define SERIAL_BUFFER_SIZE 32
 
 #define RTCINTA 0    //  RTC INTA
 #define RTCINTB 1    //  RTC INTB
@@ -88,10 +88,9 @@ uint8_t error;
 const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
 SdCard card;
 Fat16 file;
-char file_name[13];
+char file_name[13];              // 8.3
 uint16_t file_size;
 //static boolean testmenu = 0;
-
 
 DateTime now;
 
@@ -140,8 +139,8 @@ void setup (void)
 
     digitalWrite (RANGE, LOW);           //  sonar off
 		digitalWrite (SD_POWER, HIGH);       //  SD card off
-		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
     digitalWrite (BEEPIN, LOW);          //  XBee on
+		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
 #ifdef BUS_PWR
     digitalWrite (BUS_PWR, HIGH);        //  Peripheral bus on
 #endif
@@ -186,11 +185,8 @@ void setup (void)
 
       clockSet();
     }
-    Serial.print(F("offing fona.. "));
     fonaOff();
-    Serial.print(F("off"));
 
-    wait(1000);
 		now = RTC.now();    //  Get the current time from the RTC
 
     Serial.print(F("Watchdog at "));
@@ -198,7 +194,7 @@ void setup (void)
     Serial.print(':');
     Serial.println(now.minute()+2);
     wait(1000);
-    RTC.enableInterrupts2 (now.hour(), now.minute() + 2); // Set daily reset alarm 
+    //RTC.enableInterrupts2 (now.hour(), now.minute() + 2); // Set daily reset alarm 
 
 		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
 		RTC.clearINTStatus();                //  Clear any outstanding interrupts
@@ -587,7 +583,6 @@ void fonaOff (void)
   if (digitalRead (FONA_PS) == HIGH)           //  If the FONA is on
   {
     fona.sendCheckReply (F("AT+CPOWD=1"), OK); //  send shutdown command
-    digitalWrite (FONA_KEY, HIGH);             //  and set Key high
     if (digitalRead (FONA_PS) == HIGH)         //  If the FONA is still on
     {
       fonaToggle(LOW);
@@ -645,7 +640,7 @@ boolean fonaGPRSOn(void) {
   fona.setGPRSNetworkSettings (F(APN));  //  Set APN to local carrier
   wait (5000);    //  Give the network a moment
 
-  //  RSSI is a measure of signal strength -- higher is better; less than 10 is worrying
+  // RSSI is a measure of signal strength -- higher is better; less than 10 is worrying
   uint8_t rssi = fona.getRSSI();
   Serial.print (F("RSSI: ")); Serial.println (rssi);
 
@@ -885,7 +880,7 @@ int8_t smsCount (void)
 		 *   so we'll keep looking for 60 seconds.
 		 */
 		uint32_t smsTimeout = millis() + 60000;
-    int8_t NumSMS; // fona.getNumSMS returns -1 on failure
+    int8_t NumSMS; // fona.getNumSMS returns -1 on error
 
     DEBUG_RAM
 
@@ -919,17 +914,16 @@ char *parseFilename(char *b)
 }
 
 
-#define SMS_MAX_LEN 80
-#define SMS_SENDER_MAX_LEN 18
+#define SIZEOF_SMS 80
+#define SIZEOF_SMS_SENDER 18
 //  Check SMS messages received for any valid commands
 void smsCheck (void)
 {
-		char smsBuffer[SMS_MAX_LEN];
-		char smsSender[SMS_SENDER_MAX_LEN];
-		unsigned int smsLen;
-		boolean sendStatus = false;
+		char smsBuffer[SIZEOF_SMS];
+		char smsSender[SIZEOF_SMS_SENDER];
 		int8_t NumSMS;
-		uint32_t timeOut = (millis() + 60000);
+		uint16_t smsLen;
+		uint32_t timeout = (millis() + 60000);
 
 		fonaFlush();    //  Flush out any unresolved data
 		
@@ -938,10 +932,10 @@ void smsCheck (void)
     // For each SMS message
 		while (NumSMS > 0)
 		{
-				fona.readSMS (NumSMS, smsBuffer, SMS_MAX_LEN, &smsLen);  // retrieve the most recent one
-				wait (500);                                              // required delay
+				fona.readSMS (NumSMS, smsBuffer, sizeof(smsBuffer)-1, &smsLen);  // retrieve the most recent one
+				wait (500);                                                      // required delay
 
-				fona.getSMSSender (NumSMS, smsSender, SMS_SENDER_MAX_LEN);  // get sender
+				fona.getSMSSender (NumSMS, smsSender, sizeof(smsSender)-1);  // get sender
 				wait (500);
 
 				Serial.print (F("Message from "));
@@ -1025,7 +1019,7 @@ void smsCheck (void)
 
 				// Occasionally messages won't delete and this loops forever. If
 				// the process takes too long we'll just nuke everything.
-				if (millis() >= timeOut)
+				if (millis() >= timeout)
 				{
           smsDeleteAll();
           break;
