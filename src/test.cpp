@@ -1,6 +1,6 @@
 #include "tepmachcha.h"
 
-void smsSend() {
+void testSMS() {
   fona.sendSMS(TESTPHONE, "hello from tepmachcha");
 }
 
@@ -33,7 +33,6 @@ void printMenu(void) {
   Serial.println(F("[v] SD file info"));
   Serial.println(F("[i] fona FS info"));
   Serial.println(F("[t] take reading"));
-  Serial.println(F("[#] smsCount"));
   Serial.println(F("[s] sms check"));
   Serial.println(F("[D] delete all SMS"));
   Serial.println(F("[C] CRC test"));
@@ -228,16 +227,12 @@ void test(void)
       smsDeleteAll();
       break;
     }
-    case '#': {
-       smsCount();
-       break;
-    }
     case 's': {
        smsCheck();
        break;
     }
     case '1': {
-       smsSend();
+       testSMS();
        break;
     }
     case 'M': {

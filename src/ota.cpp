@@ -1,6 +1,11 @@
 #include "tepmachcha.h"
 
 uint8_t error;
+const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
+SdCard card;
+Fat16 file;
+char file_name[13];              // 8.3
+uint16_t file_size;
 
 boolean fileInit(void)
 {

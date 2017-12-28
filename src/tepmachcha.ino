@@ -8,21 +8,8 @@ byte beeShutoffHour = 0;        //  Hour to turn off manual power to XBee
 byte beeShutoffMinute = 0;      //  Minute to turn off manual power to XBee
 char method;                    //  Method of clock set, for debugging
 
-// File
-const uint8_t CHIP_SELECT = SS;  // SD chip select pin (SS = 10)
-SdCard card;
-Fat16 file;
-char file_name[13];              // 8.3
-uint16_t file_size;
-//static boolean testmenu = 0;
-
-DateTime now;
-
-DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 Sleep sleep;        //  Create the sleep object
 
-SoftwareSerial fonaSerial = SoftwareSerial (FONA_TX, FONA_RX);
-Adafruit_FONA fona = Adafruit_FONA (FONA_RST);
 
 static void rtcIRQ (void)
 {
@@ -93,6 +80,7 @@ void setup (void)
 		}
 
 
+    /*
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		if (fonaOn())
     {
@@ -109,6 +97,7 @@ void setup (void)
       clockSet();
     }
     fonaOff();
+    */
 
 		now = RTC.now();    //  Get the current time from the RTC
 
@@ -156,6 +145,7 @@ void loop (void)
 		Serial.print (F(":"));
 		Serial.println (now.minute());
 
+      //takeReading();
 		//if (now.minute() % INTERVAL == 0 && !sentData)   //  If it is time to send a scheduled reading...
 		if (now.minute() % INTERVAL == 0)   //  If it is time to send a scheduled reading...
 		{
@@ -228,11 +218,11 @@ void upload()
        *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
        *	this is 50cm. This is also what would happen if something were to block the unit -- a
        *	plastic bag that blew onto the enclosure, for example.
+       *  We send the result anyway, as the alternative is send nothing
        */
 
-      int streamHeight = takeReading();
+      int16_t streamHeight = takeReading();
       uint8_t status = ews1294Post(streamHeight, solarCharging(), fonaBattery());
-      //sentData = ews1294Post(streamHeight, solarCharging(), fonaBattery());
 
       // reset fona if upload failed
       if (!status)
@@ -250,6 +240,12 @@ void upload()
        *   midnight. 
        *
        */
+      if (now.hour() == 0 && now.minute() == 0)
+      {
+        WDTCSR = _BV(WDE);
+        while (1); // 16 ms
+      }
+      /*
       if (now.hour() == 0 && timeReset == false)
       {
           clockSet();
@@ -261,6 +257,7 @@ void upload()
       {
           timeReset = false;
       }
+      */
       
     }
 		fonaOff();
@@ -290,7 +287,7 @@ void XBeeOff (void)
 }
 
 
-#define SAMPLES 11
+#define SAMPLES 13
 int16_t takeReading (void)
 {
 		//  We will take the mode of seven samples to try to filter spurious readings
@@ -309,7 +306,7 @@ int16_t takeReading (void)
 				wait (50);
 		}
 
-		int16_t sampleMode = mode2 (sample, SAMPLES);
+		int16_t sampleMode = mode (sample, SAMPLES);
 
 		int16_t streamHeight = (SENSOR_HEIGHT - (sampleMode / 10)); //  1 µs pulse = 1mm distance
 
@@ -325,93 +322,60 @@ int16_t takeReading (void)
 }
 
 
-int16_t mode2 (int16_t *x, uint8_t n)
-{
-    uint8_t counts[n];
+// insertion sort
+void sort(int16_t *a, uint8_t n) {
+  for (uint8_t i = 1; i < n; i++) {
 
-    for (int i = 0 ; i < n; i++)
-    {
-      for (int j = 0 ; j < n ; j++)
-      {
-        if (x[j] && x[j] == x[i])
-        {
-          counts[i]++;
-          if (i != j) x[j] = 0;
-        }
-      }
+    for (uint8_t j = i; j > 0 && a[j] < a[j-1]; j--) {
+      int16_t tmp = a[j-1];
+      a[j-1] = a[j];
+      a[j] = tmp;
     }
-
-    uint8_t m = 0;
-    for (int i = 0 ; i < n; i++)
-    {
-      if (counts[i] > counts[m]) m = i;
-    }
-    return x[m];
-}
-
-
-// sort (Author: Bill Gentles, Nov. 12, 2010)
-void isort(int16_t *a, uint8_t n) {
-
-  for (uint8_t i = 1; i < n; ++i)
-  {
-
-    uint16_t j = a[i];
-    uint8_t k;
-
-    for (k = i - 1; (k >= 0) && (j < a[k]); k--)
-    {
-      a[k + 1] = a[k];
-    }
-    a[k + 1] = j;
   }
 }
 
 
-int16_t mode (int16_t *x, uint8_t n)    
+int16_t mode (int16_t *a, uint8_t n)    
 /*   Calculate the mode of an array of readings
- *   From http://playground.arduino.cc/Main/MaxSonar
+ *   FIXED From http://playground.arduino.cc/Main/MaxSonar
  */   
 {
 		uint8_t i = 0;
 		uint8_t count = 0;
 		uint8_t maxCount = 0;
-		uint16_t mode = 0;
-    uint8_t prevCount = 0;
+		int16_t mode = 0;
 		boolean bimodal;
 
-		isort (x, n);
+		sort (a, n);
+
 		while(i < (n - 1))
 		{
-				prevCount = count;
-				count = 0;
-				while(x[i] == x[i + 1])
-				{
-				        count++;
-				        i++;
-				}
+      count = 0;
+      while(a[i] == a[i + 1])
+      {
+        count++;
+        i++;
+      }
 
-				if(count > prevCount && count > maxCount)
-				{
-				        mode = x[i];
-				        maxCount = count;
-				        bimodal = 0;
-				}
-				
-				if(count == 0)
-				{
-				        i++;
-				}
-				
-				if(count == maxCount)     // If the dataset has 2 or more modes
-				{
-				        bimodal = 1;
-				}
+      if(count > maxCount)
+      {
+        mode = a[i];
+        maxCount = count;
+        bimodal = 0;
+      }
+      else if(count == 0)
+      {
+        i++;
+      }
+      else if(count == maxCount)     // the dataset has 2 or more modes
+      {
+        bimodal = 1;
+      }
     }
 				
     if(mode == 0 || bimodal == 1) // Return the median if no mode
     {
-            mode = x[(n / 2)];
+      mode = a[(n / 2)];
     }
 
     return mode;
