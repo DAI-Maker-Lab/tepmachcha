@@ -16,9 +16,6 @@ void upload(void);
 void wait(unsigned long);
 uint16_t batteryRead(void);
 int16_t takeReading(void);
-int16_t mode(int16_t*, uint8_t);
-int16_t mode2(int16_t*, uint8_t);
-void isort(int16_t*, uint8_t);
 boolean sendReading(uint16_t);
 boolean dmisPost(int, boolean,  uint16_t);
 boolean ews1294Post (int, boolean, uint16_t);
@@ -38,7 +35,6 @@ void fonaGPRSOff(void);
 uint16_t fonaBattery(void);
 void smsDeleteAll(void);
 void smsCheck(void);
-int8_t smsCount(void);
 void checkSMS(void);
 boolean fonaSendCheckOK(const __FlashStringHelper*);
 
@@ -59,6 +55,11 @@ boolean firmwareGet();
 extern char file_name[];
 extern uint16_t file_size;
 extern uint8_t error;
+
+// XBee
+void XBeeOn();
+void XBeeOnMessage(char *);
+void XBee(void);
 
 // test
 int freeRam(void);

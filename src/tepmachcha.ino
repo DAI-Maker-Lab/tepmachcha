@@ -1,19 +1,11 @@
 #include "tepmachcha.h"
 
-boolean sentData = false;
-boolean smsPower = false;       //  Manual XBee power flag
-boolean noSMS = false;          //  Flag to turn off SMS checking -- for future use
-boolean timeReset = false;      //  Flag indicating whether midnight time reset has already occurred
-byte beeShutoffHour = 0;        //  Hour to turn off manual power to XBee
-byte beeShutoffMinute = 0;      //  Minute to turn off manual power to XBee
-char method;                    //  Method of clock set, for debugging
-
-Sleep sleep;        //  Create the sleep object
-
+boolean freshboot = true; // Newly rebooted
+Sleep sleep;              //  Create the sleep object
 
 static void rtcIRQ (void)
 {
-		RTC.clearINTStatus();   //  Wake from sleep and clear the RTC interrupt
+		RTC.clearINTStatus(); //  Wake from sleep and clear the RTC interrupt
 }
 
 
@@ -34,6 +26,7 @@ void setup (void)
 		Serial.println (F("mV"));
 
     // Set output pins (default is input)
+		pinMode (WATCHDOG, OUTPUT);
 		pinMode (BEEPIN, OUTPUT);
 		pinMode (RANGE, OUTPUT);
 		pinMode (FONA_KEY, OUTPUT);
@@ -47,14 +40,14 @@ void setup (void)
 		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
 		interrupts();
 
-    digitalWrite (RANGE, LOW);           //  sonar off
-		digitalWrite (SD_POWER, HIGH);       //  SD card off
-    digitalWrite (BEEPIN, LOW);          //  XBee on
-		digitalWrite (FONA_KEY, HIGH);       //  Initial state for key pin
+    digitalWrite (WATCHDOG, HIGH);       // sonar off
+    digitalWrite (RANGE, LOW);           // sonar off
+		digitalWrite (SD_POWER, HIGH);       // SD card off
+    digitalWrite (BEEPIN, LOW);          // XBee on
+		digitalWrite (FONA_KEY, HIGH);       // Initial state for key pin
 #ifdef BUS_PWR
-    digitalWrite (BUS_PWR, HIGH);        //  Peripheral bus on
+    digitalWrite (BUS_PWR, HIGH);        // Peripheral bus on
 #endif
-
 
 		/*  If the voltage at startup is less than 3.5V, we assume the battery died in the field
 		 *  and the unit is attempting to restart after the panel charged the battery enough to
@@ -80,7 +73,6 @@ void setup (void)
 		}
 
 
-    /*
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		if (fonaOn())
     {
@@ -97,46 +89,26 @@ void setup (void)
       clockSet();
     }
     fonaOff();
-    */
 
 		now = RTC.now();    //  Get the current time from the RTC
 
-    Serial.print(F("Watchdog at "));
-    Serial.print(now.hour());
-    Serial.print(':');
-    Serial.println(now.minute()+2);
-    wait(1000);
-    //RTC.enableInterrupts2 (now.hour(), now.minute() + 2); // Set daily reset alarm 
+    //RTC.enableInterrupts2 ((now.hour() + 1) % 24, 0); // Set daily reset alarm 
 
 		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
 		RTC.clearINTStatus();                //  Clear any outstanding interrupts
 		
-		// We'll keep the XBee on for an hour after startup to assist installation
-		if (now.hour() == 23) {
-				beeShutoffHour = 0;
-		} else {
-				beeShutoffHour = (now.hour() + 1);
-		}
-		beeShutoffMinute = now.minute();
-
-		Serial.print (F("XBee powered until "));
-		Serial.print (beeShutoffHour);
-		Serial.print (F(":"));
-		Serial.println (beeShutoffMinute);
-		Serial.flush();
-		smsPower = true;
+    XBeeOn();
+    char buffer[20];
+    XBeeOnMessage(buffer);
+    Serial.println(buffer);
 }
 
 
 void loop (void)
 {
-//#ifndef DEBUG
-    //test();
-    //return;
-//#endif
 
 #ifdef BUS_PWR
-    //digitalWrite (BUS_PWR, HIGH);           //  Peripheral bus on
+    digitalWrite (BUS_PWR, HIGH);           //  Peripheral bus on
 #endif
 
 		now = RTC.now();      //  Get the current time from the RTC
@@ -145,65 +117,32 @@ void loop (void)
 		Serial.print (F(":"));
 		Serial.println (now.minute());
 
-      //takeReading();
-		//if (now.minute() % INTERVAL == 0 && !sentData)   //  If it is time to send a scheduled reading...
+    // The RTC drifts more than the datasheet says, so we
+    // reset the time every day at midnight, by rebooting
+    //if (!freshboot && now.hour() == 0 && now.minute() == 0)
+    if (!freshboot && now.minute() == 10)
+    {
+      Serial.println(F("reboot"));
+      WDTCSR = _BV(WDE);
+      while (1); // 16 ms
+    } else {
+      freshboot = false;
+    }
+
 		if (now.minute() % INTERVAL == 0)   //  If it is time to send a scheduled reading...
 		{
 				upload ();
     }
-		//} else { sentData = false };
 
-		// We will turn on the XBee radio for programming only within a specific
-		// window to save power
-		if (now.hour() >= XBEEWINDOWSTART && now.hour() <= XBEEWINDOWEND)
-		{
-				digitalWrite (BEEPIN, LOW);
-		}
-		else
-		{
-				//  If the XBee power was turned on by SMS, we'll check to see if 
-				//  it's time to turn it back off
-				if(smsPower == true && now.hour() < beeShutoffHour)
-				{
-				        digitalWrite (BEEPIN, LOW);
-				}
-				else
-				{
-				        if(smsPower == true && now.hour() == beeShutoffHour && now.minute() < beeShutoffMinute)
-				        {
-				                digitalWrite (BEEPIN, LOW);
-				        }
-				        else
-				        {
-				                if (smsPower == true && now.hour() == 23 && beeShutoffHour == 0)
-				                {
-				                        digitalWrite (BEEPIN, LOW);
-				                }
-				                else
-				                {
-				                        if (smsPower == true)
-				                        {
-				                                  Serial.println (F("Turning XBee off.."));
-				                                  Serial.flush();
-				                                  wait (500);
-				                        }
-		
-				                        digitalWrite (BEEPIN, HIGH);
-				                        smsPower = false;
-				                }
-				        }
-				}
-		}
+    XBee();
 
 		Serial.println(F("sleeping"));
 		Serial.flush();                         //  Flush any output before sleep
 
 #ifdef BUS_PWR
-    //digitalWrite (BUS_PWR, LOW);           //  Peripheral bus off
+    digitalWrite (BUS_PWR, LOW);           //  Peripheral bus off
 #endif
 		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
-		//sleep.adcMode();
-		//sleep.idleMode();
 		RTC.clearINTStatus();                   //  Clear any outstanding RTC interrupts
 		sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 }
@@ -211,59 +150,44 @@ void loop (void)
 
 void upload()
 {
-		if (fonaOn())
+
+  int16_t streamHeight;
+  uint8_t status;
+
+  if (fonaOn())
+  {
+
+    /*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
+     *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
+     *	this is 50cm. This is also what would happen if something were to block the unit -- a
+     *	plastic bag that blew onto the enclosure, for example.
+     *  We send the result anyway, as the alternative is send nothing
+     */
+
+    if ((streamHeight = takeReading()) <= 0)
     {
-
-      /*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
-       *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
-       *	this is 50cm. This is also what would happen if something were to block the unit -- a
-       *	plastic bag that blew onto the enclosure, for example.
-       *  We send the result anyway, as the alternative is send nothing
-       */
-
-      int16_t streamHeight = takeReading();
-      uint8_t status = ews1294Post(streamHeight, solarCharging(), fonaBattery());
-
-      // reset fona if upload failed
-      if (!status)
-      {
-        fonaOff();
-        fonaOn();
-      }
-
-      if (noSMS == false)
-      {
-          smsCheck();
-      }
-
-      /*   The RTC drifts more than the datasheet says, so we'll reset the time every day at
-       *   midnight. 
-       *
-       */
-      if (now.hour() == 0 && now.minute() == 0)
-      {
-        WDTCSR = _BV(WDE);
-        while (1); // 16 ms
-      }
-      /*
-      if (now.hour() == 0 && timeReset == false)
-      {
-          clockSet();
-          timeReset = true;
-      }
-      //else { sentData = false }
-
-      if (now.hour() != 0)
-      {
-          timeReset = false;
-      }
-      */
-      
+      streamHeight = takeReading();     // take a second reading
     }
-		fonaOff();
+
+    status = ews1294Post(streamHeight, solarCharging(), fonaBattery());
+    //if (!(status = ews1294Post(streamHeight, solarCharging(), fonaBattery())))
+    //{
+      //status = ews1294Post(streamHeight, solarCharging(), fonaBattery()); // try again
+    //}
+
+    // reset fona if upload failed
+    if (!status)
+    {
+      fonaOff();
+      fonaOn();
+    }
+
+    // process SMS messages
+    smsCheck();
+
+  }
+  fonaOff();
 }
-
-
 
 
 void wait (uint32_t period)
@@ -277,111 +201,6 @@ void wait (uint32_t period)
 }
 
 
-void XBeeOn (void)
-{
-}
-
-
-void XBeeOff (void)
-{
-}
-
-
-#define SAMPLES 13
-int16_t takeReading (void)
-{
-		//  We will take the mode of seven samples to try to filter spurious readings
-		int16_t sample[SAMPLES];
-		
-    digitalWrite (RANGE, HIGH);           //  sonar on
-    wait (1000);
-
-		for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
-		{
-				sample[sampleCount] = pulseIn (PING, HIGH);
-				Serial.print (F("Sample "));
-				Serial.print (sampleCount);
-				Serial.print (F(": "));
-				Serial.println (sample[sampleCount]);
-				wait (50);
-		}
-
-		int16_t sampleMode = mode (sample, SAMPLES);
-
-		int16_t streamHeight = (SENSOR_HEIGHT - (sampleMode / 10)); //  1 µs pulse = 1mm distance
-
-		Serial.print (F("Surface distance from sensor is "));
-		Serial.print (sampleMode);
-		Serial.println (F("mm."));
-		Serial.print (F("Calculated surface height is "));
-		Serial.print (streamHeight);
-		Serial.println (F("cm."));
-
-    digitalWrite (RANGE, LOW);           //  sonar off
-		return streamHeight;
-}
-
-
-// insertion sort
-void sort(int16_t *a, uint8_t n) {
-  for (uint8_t i = 1; i < n; i++) {
-
-    for (uint8_t j = i; j > 0 && a[j] < a[j-1]; j--) {
-      int16_t tmp = a[j-1];
-      a[j-1] = a[j];
-      a[j] = tmp;
-    }
-  }
-}
-
-
-int16_t mode (int16_t *a, uint8_t n)    
-/*   Calculate the mode of an array of readings
- *   FIXED From http://playground.arduino.cc/Main/MaxSonar
- */   
-{
-		uint8_t i = 0;
-		uint8_t count = 0;
-		uint8_t maxCount = 0;
-		int16_t mode = 0;
-		boolean bimodal;
-
-		sort (a, n);
-
-		while(i < (n - 1))
-		{
-      count = 0;
-      while(a[i] == a[i + 1])
-      {
-        count++;
-        i++;
-      }
-
-      if(count > maxCount)
-      {
-        mode = a[i];
-        maxCount = count;
-        bimodal = 0;
-      }
-      else if(count == 0)
-      {
-        i++;
-      }
-      else if(count == maxCount)     // the dataset has 2 or more modes
-      {
-        bimodal = 1;
-      }
-    }
-				
-    if(mode == 0 || bimodal == 1) // Return the median if no mode
-    {
-      mode = a[(n / 2)];
-    }
-
-    return mode;
-}
-
-
 /* Get battery reading on ADC pin BATT, in mV
  *
  * VBAT is divided by a 10k/2k voltage divider (ie /6) to BATT, which is then
@@ -389,11 +208,11 @@ int16_t mode (int16_t *a, uint8_t n)
  *
  *   mV = BATT * (AREF * ( (10+2)/2 ) / 1.023)
  *
- * We use integer math to avoid including ~1.2K of FP/multiplication library
+ * We use integer math to avoid including ~1.2K of FP library
  * AREF ADC->mV factor   approx integer fraction
  * ==== ==============   =======================
- * 1.1      6.45          1651/256 (~103/16)   (103 = 64 + 32 + 8 - 1)
- * 3.3     19.35          4955/256 (~155/8)    (155 = 128 + 32 - 4 - 1)
+ * 1.1      6.45          1651/256 (~103/16)
+ * 3.3     19.35          4955/256 (~155/8)
  *
  * Note, if we ONLY needed to compare the ADC reading to a FIXED voltage,
  * we'd simplify by letting the compiler calculate the equivalent 0-1023 value
@@ -407,7 +226,6 @@ int16_t mode (int16_t *a, uint8_t n)
 uint16_t batteryRead(void)
 {
   uint32_t mV = 0;
-  //return ((uint32_t)analogRead(BATT) * 155) / 8;
 
   for (uint8_t i = 155; i;i--)
   {

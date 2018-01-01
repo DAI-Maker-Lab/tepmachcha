@@ -86,7 +86,6 @@ void clockSet2 (void)
     else
     {
       Serial.println (F("Network time failed, using RTC"));
-      method = 'X';
 		}
 
 		wait (200);              //  Give FONA a moment to catch its breath
@@ -143,11 +142,6 @@ void clockSet (void)
 				netMinute = fona.parseInt();
 				netSecond = fona.parseInt();  // Our seconds may lag slightly
 		
-				method = 'N';
-		}
-		else 
-		{
-				method = 'G';
 		}
 
 static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
@@ -185,7 +179,7 @@ static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30
         }
         else                                  // TZ is same day
         {
-            netHour = localtime;                // simply add TZ offset
+            netHour = localtime;              // simply add TZ offset
         }
 
 				Serial.print (F("Obtained current time: "));
@@ -200,7 +194,6 @@ static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30
 		else
 		{
 				Serial.println (F("Time sync failed, using RTC"));
-				method = 'X';
 		}
 
 		wait (200);              //  Give FONA a moment to catch its breath
@@ -442,9 +435,27 @@ char *parseFilename(char *b)
     return b+i;            // return postition of char after file_name
 }
 
-smsParse()
+
+
+/*
+smsParse(uint8_t NumSMS)
 {
+		char smsBuffer[SIZEOF_SMS];
+		char smsSender[SIZEOF_SMS_SENDER];
+
+				fona.readSMS (NumSMS, smsBuffer, sizeof(smsBuffer)-1, &smsLen);  // retrieve the most recent one
+				wait (500);                                                      // required delay
+
+				fona.getSMSSender (NumSMS, smsSender, sizeof(smsSender)-1);      // get sender
+				wait (500);
+
+				Serial.print (F("Message from "));
+				Serial.print (smsSender);
+				Serial.println (F(":"));
+				Serial.println (smsBuffer);
+
 }
+*/
 
 
 #define SIZEOF_SMS 80
@@ -534,19 +545,9 @@ void smsCheck (void)
         // BEEPASSWORD
 				if (strcmp_P(smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
 				{
-            //  ...determine the appropriate shutoff time and turn on the XBee until then
-            beeShutoffHour = (now.hour() + 1);   // We'll leave the XBee on for 1 hour
-            if (beeShutoffHour == 24)
-            beeShutoffHour = 0;
-            
-            digitalWrite (BEEPIN, LOW);          // Turn on the XBee
-
-            // Compose a reply to the sender confirming the action and giving the shutoff time
-            sprintf_P(smsBuffer, (prog_char *)F("XBee on until %02d:%02d"), beeShutoffHour, beeShutoffMinute);
-
-            smsPower = true;                     //  Raise the flag 
+            XBeeOn();
+            XBeeOnMessage(smsBuffer);
             fona.sendSMS(smsSender, smsBuffer);  //  Tell the sender what you've done
-
             Serial.println (F("XBee turned on by SMS."));
 				}
 
