@@ -215,16 +215,6 @@ void fonaReadTime(DateTime *dt)
 }
 
 
-clockUTC(DateTime *dt)
-{
-}
-
-
-void clockSet3 (void)
-{
-}
-
-
 void fonaToggle(boolean state)
 {
   uint32_t timeout = millis() + 4000;
@@ -388,7 +378,7 @@ void fonaFlush (void)
 
 char fonaRead(void)
 {
-  // read from fona, waiting up to <timeout> ms for something at arrive
+  // read a char from fona, waiting up to <timeout> ms for something at arrive
   uint32_t timeout = millis() + 1000;
 
   while(!fona.available())

@@ -12,14 +12,17 @@ boolean xBeeState = HIGH;         // XBee power state
 uint8_t xBeeShutoffHour = 0;       // Hour to turn off manual power to XBee
 uint8_t xBeeShutoffMinute = 0;     // Minute to turn off manual power to XBee
 
+
+// Turn the XBee on for 1 hour
 void XBeeOn ()
 {
-		// We'll keep the XBee on for an hour after startup to assist installation
     xBeeShutoffHour = (now.hour() + 1) % 24;
 		xBeeShutoffMinute = now.minute();
 
 }
 
+
+// Generate a message stating XBee shutoff time
 void XBeeOnMessage(char *buffer)
 {
     sprintf_P(buffer, (prog_char *)F("XBee on until %02d:%02d"), xBeeShutoffHour, xBeeShutoffMinute);
@@ -32,7 +35,9 @@ void XBeeOnMessage(char *buffer)
 // Apply XBee state
 void XBee (void)
 {
-  // Turn on at start of window
+  // Start of On window, set state on, and set shutoff time.
+  // Note: The window should be > 1 hour, or this will overwrite
+  // the shutofftime set by XBeeOn (1 hour).
   if ( now.hour() == XBEEWINDOWSTART )
   {
     xBeeShutoffHour = XBEEWINDOWEND;
@@ -48,6 +53,6 @@ void XBee (void)
     xBeeState = HIGH;
   }
 
-  // Turn the Xbee on/off according to flag
+  // Actually turn the Xbee on/off according to flag
   digitalWrite (BEEPIN, xBeeState);
 }

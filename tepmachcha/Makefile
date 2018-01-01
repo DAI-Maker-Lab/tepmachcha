@@ -13,7 +13,7 @@ F_CPU=8000000L
 BOARD_TAG    = uno
 ARDUINO_LIBS = DS1337 Sleep_n0m1 Adafruit_FONA_Library SoftwareSerial Wire Fat16 EEPROM
 
-ARDUINO_HEADER=arduino-mk.h		# include our own header, which includes Arduino.h, and function prototypes
+ARDUINO_HEADER=arduino-mk.mk		# include our own header, which includes Arduino.h, and function prototypes
 ARDUINO_DIR   = /Applications/Arduino.app/Contents/Java
 ARDUINO_TOOLS_DIR = /Applications/Arduino.app/Contents/Java/hardware/tools
 #USER_LIB_PATH=~/src/Arduino/Libraries/
