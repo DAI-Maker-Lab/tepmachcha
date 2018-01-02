@@ -7,6 +7,7 @@ Fat16 file;
 char file_name[13];              // 8.3
 uint16_t file_size;
 
+
 boolean fileInit(void)
 {
   digitalWrite (SD_POWER, LOW);        //  SD card on
@@ -201,10 +202,12 @@ uint16_t fonaReadBlock(uint16_t len)
   return n;
 }
 
+
 boolean fonaFileSize()
 {
   fona.sendCheckReply (F("AT+FSFLSIZE=C:\\User\\ftp\\tmp.bin"), OK);
 }
+
 
 #define BLOCK_ATTEMPTS 3
 #define BLOCK_SIZE 512

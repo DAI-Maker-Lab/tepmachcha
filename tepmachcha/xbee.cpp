@@ -31,8 +31,8 @@ void XBeeOnMessage(char *buffer)
 }
 
 
-// Check if we hit trigger times (window start, shutoff time)
-// Apply XBee state
+// - Check if we hit trigger times (window start, shutoff time)
+// - Apply XBee state
 void XBee (void)
 {
   // Start of On window, set state on, and set shutoff time.
