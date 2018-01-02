@@ -152,23 +152,23 @@ static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30
 				if ( localtime < 0)                   // TZ takes us back a day
 				{
 				    netHour = localtime + 24;         // hour % 24
-            if (!netDay--)                    // adjust the date to UTC - 1
+            if (--netDay == 0)                // adjust the date to UTC - 1
             {
-              if (!netMonth--)
+              netDay = daysInMonth[netMonth];
+              if (--netMonth == 0)
               {
                 netMonth = 12;
                 netYear--;
               }
-              netDay = daysInMonth[netMonth];
             }
 				}
 				else if (localtime > 23)              // TZ takes us to the next day
         {
             netHour = localtime - 24;         // hour % 24
-            if (netDay++ > daysInMonth[netMonth]) // adjust the date to UTC + 1
+            if (++netDay > daysInMonth[netMonth]) // adjust the date to UTC + 1
             {
               netDay = 1;
-              if (netMonth > 12)
+              if (++netMonth > 12)
               {
                  netMonth = 1;
                  netYear++;
