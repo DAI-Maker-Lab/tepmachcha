@@ -13,46 +13,28 @@ void sort(int16_t *a, uint8_t n) {
 }
 
 
-// Calculate the mode of an array of readings
-// FIXED From http://playground.arduino.cc/Main/MaxSonar
-int16_t mode (int16_t *a, uint8_t n)    
+// Calculate mode, or median of samples
+int16_t mode (int16_t *sample, uint8_t n)
 {
-		uint8_t i = 0;
-		uint8_t count = 0;
-		uint8_t maxCount = 0;
-		int16_t mode = 0;
-		boolean bimodal;
 
-		sort (a, n);
+    uint16_t mode;
+    uint8_t mode_count = 1;
+    uint8_t count = 1;
 
-		while(i < (n - 1))
-		{
-      count = 0;
-      while(a[i] == a[i + 1])
-      {
+    for (int i = 1; i < n; i++) {
+      if (sample[i] == sample[i - 1])
         count++;
-        i++;
-      }
+      else
+        count = 1;
 
-      if(count > maxCount)
+      if (count > mode_count)  // current sequence is the longest
       {
-        mode = a[i];
-        maxCount = count;
-        bimodal = 0;
-      }
-      else if(count == 0)
+          mode_count = count;
+          mode = sample[i];
+      } else if (count == mode_count)
       {
-        i++;
+        mode = sample[(n/2)];  // use median if no sequence or bimodal
       }
-      else if(count == maxCount)     // the dataset has 2 or more modes
-      {
-        bimodal = 1;
-      }
-    }
-				
-    if(mode == 0 || bimodal == 1) // Return the median if no mode
-    {
-      mode = a[(n / 2)];
     }
 
     return mode;
