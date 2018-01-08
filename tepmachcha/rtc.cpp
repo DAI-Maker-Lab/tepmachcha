@@ -25,7 +25,7 @@ void clockSet2 (void)
 		char theDate[17];
 
 		Serial.println (F("Fetching GSM time"));
-		wait (1000);    //  Give time for any trailing data to come in from FONA
+		wait (2000);    //  Give time for any trailing data to come in from FONA
 
 		fonaFlush();    //  Flush any trailing data
 		fona.sendCheckReply (F("AT+CIPGSMLOC=2,1"), OK);    //  Query GSM location service for time
@@ -142,7 +142,7 @@ void clockSet (void)
 		
 		}
 
-static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
+    static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
 
     if (netYear > 2000) { netYear -= 2000; }  // Adjust from YYYY to YY
 		if (netYear >= 17 && netYear < 50)        // Date looks valid
@@ -154,12 +154,12 @@ static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30
 				    netHour = localtime + 24;         // hour % 24
             if (--netDay == 0)                // adjust the date to UTC - 1
             {
-              netDay = daysInMonth[netMonth];
               if (--netMonth == 0)
               {
                 netMonth = 12;
                 netYear--;
               }
+              netDay = daysInMonth[netMonth];
             }
 				}
 				else if (localtime > 23)              // TZ takes us to the next day
@@ -210,4 +210,6 @@ void fonaReadTime(DateTime *dt)
     hh = fona.parseInt();
     mm = fona.parseInt();
     ss = fona.parseInt();
+
+    if (y > 2000) { y -= 2000; }  // Adjust from YYYY to YY
 }

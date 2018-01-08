@@ -8,9 +8,9 @@
 //  We maintain a power state flag, and whenever we set it, we set a shutoff hour/minute
 //
 
-boolean xBeeState = HIGH;         // XBee power state
-uint8_t xBeeShutoffHour = 0;       // Hour to turn off manual power to XBee
-uint8_t xBeeShutoffMinute = 0;     // Minute to turn off manual power to XBee
+boolean xBeeState = HIGH;          // XBee power state, default off (HIGH)
+uint8_t xBeeShutoffHour = 0;       // Hour to turn off XBee
+uint8_t xBeeShutoffMinute = 0;     // Minute to turn off XBee
 
 
 // Turn the XBee on for 1 hour
@@ -18,7 +18,8 @@ void XBeeOn ()
 {
     xBeeShutoffHour = (now.hour() + 1) % 24;
 		xBeeShutoffMinute = now.minute();
-
+		xBeeState = LOW;
+    digitalWrite (BEEPIN, xBeeState);
 }
 
 
@@ -26,8 +27,6 @@ void XBeeOn ()
 void XBeeOnMessage(char *buffer)
 {
     sprintf_P(buffer, (prog_char *)F("XBee on until %02d:%02d"), xBeeShutoffHour, xBeeShutoffMinute);
-		xBeeState = LOW;
-    digitalWrite (BEEPIN, xBeeState);
 }
 
 

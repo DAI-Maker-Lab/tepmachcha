@@ -26,7 +26,9 @@ void setup (void)
 		Serial.println (F("mV"));
 
     // Set output pins (default is input)
-		pinMode (WATCHDOG, OUTPUT);
+		pinMode (WATCHDOG, INPUT_PULLUP);
+		//pinMode (WATCHDOG, INPUT);
+
 		pinMode (BEEPIN, OUTPUT);
 		pinMode (RANGE, OUTPUT);
 		pinMode (FONA_KEY, OUTPUT);
@@ -36,11 +38,6 @@ void setup (void)
 		pinMode (BUS_PWR, OUTPUT);
 #endif
 
-    // Set RTC interrupt handler
-		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
-		interrupts();
-
-    digitalWrite (WATCHDOG, HIGH);       // sonar off
     digitalWrite (RANGE, LOW);           // sonar off
 		digitalWrite (SD_POWER, HIGH);       // SD card off
     digitalWrite (BEEPIN, LOW);          // XBee on
@@ -48,6 +45,10 @@ void setup (void)
 #ifdef BUS_PWR
     digitalWrite (BUS_PWR, HIGH);        // Peripheral bus on
 #endif
+
+    // Set RTC interrupt handler
+		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
+		interrupts();
 
 		/*  If the voltage at startup is less than 3.5V, we assume the battery died in the field
 		 *  and the unit is attempting to restart after the panel charged the battery enough to
@@ -85,7 +86,6 @@ void setup (void)
       // Delete any accumulated SMS messages to avoid interference from old commands
       smsDeleteAll();
 #endif
-
       clockSet();
     }
     fonaOff();
@@ -93,6 +93,7 @@ void setup (void)
 		now = RTC.now();    //  Get the current time from the RTC
 
     //RTC.enableInterrupts2 ((now.hour() + 1) % 24, 0); // Set daily reset alarm 
+    //RTC.enableInterrupts2 (12, 0);     // Set daily reset alarm 
 
 		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
 		RTC.clearINTStatus();                //  Clear any outstanding interrupts
@@ -119,8 +120,7 @@ void loop (void)
 
     // The RTC drifts more than the datasheet says, so we
     // reset the time every day at midnight, by rebooting
-    //if (!freshboot && now.hour() == 0 && now.minute() == 0)
-    if (!freshboot && now.minute() == 10)
+    if (!freshboot && now.hour() == 1 && now.minute() == 0)
     {
       Serial.println(F("reboot"));
       WDTCSR = _BV(WDE);
@@ -169,17 +169,17 @@ void upload()
       streamHeight = takeReading();     // take a second reading
     }
 
-    status = ews1294Post(streamHeight, solarCharging(), fonaBattery());
-    //if (!(status = ews1294Post(streamHeight, solarCharging(), fonaBattery())))
-    //{
-      //status = ews1294Post(streamHeight, solarCharging(), fonaBattery()); // try again
-    //}
+    //status = ews1294Post(streamHeight, solarCharging(), fonaBattery());
+    if (!(status = ews1294Post(streamHeight, solarCharging(), fonaBattery())))
+    {
+      status = ews1294Post(streamHeight, solarCharging(), fonaBattery()); // try again
+    }
 
     // reset fona if upload failed
     if (!status)
     {
       fonaOff();
-      fonaOn();
+      fonaOn();   // we don't need GPRS for the SMS check, but do it anyway, but don't check status
     }
 
     // process SMS messages
