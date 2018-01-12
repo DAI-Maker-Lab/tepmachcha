@@ -13,7 +13,7 @@ void sort(int16_t *a, uint8_t n) {
 }
 
 
-// Calculate mode, or median of samples
+// Calculate mode, or median of sorted samples
 int16_t mode (int16_t *sample, uint8_t n)
 {
 
