@@ -12,6 +12,7 @@
 #define FTPPW         "FTP PASSWORD"
 #define FTPUSER       "FTP USER"
 #define FTPSERVER     "FTP SERVER"
+#define FTPPATH       "/home/ftpuser/files/"
 #define FOTAPASSWORD  "FOTA_PASSWORD"  // Password to trigger FOTA update
 #define FLASHPASSWORD "FLASH_PASSWORD" // Password to flash app from SD file
 #define PINGPASSWORD  "PING_PASSWORD"  //  Password to return info/status sms
