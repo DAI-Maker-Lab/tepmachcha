@@ -17,8 +17,8 @@ uint8_t xBeeShutoffMinute = 0;     // Minute to turn off XBee
 void XBeeOn ()
 {
     xBeeShutoffHour = (now.hour() + 1) % 24;
-		xBeeShutoffMinute = now.minute();
-		xBeeState = LOW;
+    xBeeShutoffMinute = now.minute();
+    xBeeState = LOW;
     digitalWrite (BEEPIN, xBeeState);
 }
 

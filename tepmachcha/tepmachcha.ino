@@ -129,12 +129,12 @@ void loop (void)
       freshboot = false;
     }
 
+    XBee();
+
 		if (now.minute() % INTERVAL == 0)   //  If it is time to send a scheduled reading...
 		{
 				upload ();
     }
-
-    XBee();
 
 		Serial.println(F("sleeping"));
 		Serial.flush();                         //  Flush any output before sleep
