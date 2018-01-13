@@ -1,12 +1,13 @@
 #include "tepmachcha.h"
 
 // XBee is turned on:
-// 1) For 1 hour after boot
-// 3) For 1 hour after receiving XBee SMS
-// 2) During the XBee window, daily
+//   For 1 hour after boot
+//   For 1 hour after receiving XBee SMS
+//   During the XBee window, daily
 //
 //  We maintain a power state flag, and whenever we set it, we set a shutoff hour/minute
 //
+
 
 boolean xBeeState = HIGH;          // XBee power state, default off (HIGH)
 uint8_t xBeeShutoffHour = 0;       // Hour to turn off XBee
