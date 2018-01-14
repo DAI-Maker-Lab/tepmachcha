@@ -10,6 +10,7 @@ DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 #define MINUTE in->minute
 #define SECOND in->second
 
+/*
 void clockSet2 (void)
 {
     int16_t values[7];
@@ -88,6 +89,7 @@ void clockSet2 (void)
 
 		wait (200);              //  Give FONA a moment to catch its breath
 }
+*/
 
 
 void clockSet (void)

@@ -1,10 +1,12 @@
 #include "tepmachcha.h"
 
 // insertion sort
-void sort(int16_t *a, uint8_t n) {
-  for (uint8_t i = 1; i < n; i++) {
-
-    for (uint8_t j = i; j > 0 && a[j] < a[j-1]; j--) {
+void sort(int16_t *a, uint8_t n)
+{
+  for (uint8_t i = 1; i < n; i++)
+  {
+    for (uint8_t j = i; j > 0 && a[j] < a[j-1]; j--)
+    {
       int16_t tmp = a[j-1];
       a[j-1] = a[j];
       a[j] = tmp;
@@ -16,12 +18,12 @@ void sort(int16_t *a, uint8_t n) {
 // Calculate mode, or median of sorted samples
 int16_t mode (int16_t *sample, uint8_t n)
 {
-
     uint16_t mode;
     uint8_t mode_count = 1;
     uint8_t count = 1;
 
-    for (int i = 1; i < n; i++) {
+    for (int i = 1; i < n; i++)
+    {
       if (sample[i] == sample[i - 1])
         count++;
       else
@@ -31,7 +33,8 @@ int16_t mode (int16_t *sample, uint8_t n)
       {
           mode_count = count;
           mode = sample[i];
-      } else if (count == mode_count)
+      }
+      else if (count == mode_count)
       {
         mode = sample[(n/2)];  // use median if no sequence or bimodal
       }

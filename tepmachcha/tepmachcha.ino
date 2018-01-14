@@ -98,8 +98,9 @@ void setup (void)
 		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
 		RTC.clearINTStatus();                //  Clear any outstanding interrupts
 		
+    // turn XBee on for an hour
     XBeeOn();
-    char buffer[20];
+    char buffer[32]; // only 20 required currently
     XBeeOnMessage(buffer);
     Serial.println(buffer);
 }
@@ -179,7 +180,7 @@ void upload()
     if (!status)
     {
       fonaOff();
-      fonaOn();   // we don't need GPRS for the SMS check, but do it anyway, but don't check status
+      fonaOn();   // we don't need GPRS for the SMS check itself, but do for FTP.
     }
 
     // process SMS messages
@@ -253,7 +254,13 @@ uint16_t batteryRead(void)
 // SLEEPING 900+   220+  ( vbatt ) => 3.6v -> 4.2v
 boolean solarCharging()
 {
-    int16_t solar = analogRead(SOLAR);
+    uint16_t solar;
+
+    // Get an average of 64 readings (fits uint16)
+    for (uint8_t i = 0; i < 64; i++) 
+      solar += analogRead(SOLAR);
+    solar = solar / 64;
+
     Serial.print (F("solar analog: "));
     Serial.println (solar);
     return ( solar > 180 && solar <= 220 );  // 3.3v analogue ref
@@ -262,52 +269,57 @@ boolean solarCharging()
 
 boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
 {
-        uint16_t status_code = 0;
-        uint16_t response_length = 0;
-        char post_data[200];
+    uint16_t status_code = 0;
+    uint16_t response_length = 0;
+    char post_data[200];
 
-        DEBUG_RAM
+    DEBUG_RAM
 
-        // Construct the body of the POST request:
-        sprintf_P (post_data,
-            (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
-              streamHeight,
-              solar,
-              voltage,
-              now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second()
-        );
+    // Construct the body of the POST request:
+    sprintf_P (post_data,
+        (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
+          streamHeight,
+          solar,
+          voltage,
+          now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second()
+    );
 
-        Serial.println (F("data:"));
-        Serial.println (post_data);
+    Serial.println (F("data:"));
+    Serial.println (post_data);
 
-        //  ews1294.info does not currently support SSL; if it is added you will need to uncomment the following
-        //fona.sendCheckReply (F("AT+HTTPSSL=1"), F("OK"));   //  Turn on SSL
-        //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
+    // ews1294.info does not currently support SSL; if it is added you will need to uncomment the following
+    //fona.sendCheckReply (F("AT+HTTPSSL=1"), F("OK"));   //  Turn on SSL
+    //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
 
-        // Send the POST request we have constructed
-        if (fona.HTTP_POST_start ("ews1294.info/api/v1/sensorapi", F("application/x-www-form-urlencoded"), post_data, strlen(post_data), &status_code, &response_length)) {
-          // flush response
-          while (response_length > 0)
-          {
-             fonaFlush();
-             response_length--;
-          }
-        }
+    // Send the POST request we have constructed
+    if (fona.HTTP_POST_start ("ews1294.info/api/v1/sensorapi",
+                              F("application/x-www-form-urlencoded"),
+                              (uint8_t *)post_data, strlen(post_data),
+                              &status_code,
+                              &response_length))
+    {
+      // flush response
+      while (response_length > 0)
+      {
+         fonaFlush();
+         response_length--;
+      }
+    }
 
-        fonaFlush();
-        fona.HTTP_POST_end();
+    fonaFlush();
+    fona.HTTP_POST_end();
 
-        if (status_code == 200)
-        {
-            Serial.println (F("POST succeeded."));
-            return true;
-        }
-        else
-        {
-            Serial.print (F("POST failed. Status-code: "));
-            Serial.println (status_code);
-            return false;
-        }
+    if (status_code == 200)
+    {
+        Serial.println (F("POST succeeded."));
+        return true;
+    }
+    else
+    {
+        Serial.print (F("POST failed. Status-code: "));
+        Serial.println (status_code);
+        return false;
+    }
 }
 /*
 boolean ews1294Post2 (int16_t streamHeight, boolean solar, uint16_t voltage)

@@ -6,8 +6,6 @@
 //   During the XBee window, daily
 //
 //  We maintain a power state flag, and whenever we set it, we set a shutoff hour/minute
-//
-
 
 boolean xBeeState = HIGH;          // XBee power state, default off (HIGH)
 uint8_t xBeeShutoffHour = 0;       // Hour to turn off XBee
