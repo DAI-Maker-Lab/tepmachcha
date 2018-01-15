@@ -44,7 +44,7 @@ int16_t mode (int16_t *sample, uint8_t n)
 }
 
 
-#define SAMPLES 13
+#define SAMPLES 11
 int16_t takeReading (void)
 {
 		int16_t sample[SAMPLES];
