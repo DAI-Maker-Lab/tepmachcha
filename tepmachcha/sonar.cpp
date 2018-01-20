@@ -1,3 +1,5 @@
+// Maxbotix Sonar
+
 #include "tepmachcha.h"
 
 // insertion sort
@@ -18,9 +20,9 @@ void sort(int16_t *a, uint8_t n)
 // Calculate mode, or median of sorted samples
 int16_t mode (int16_t *sample, uint8_t n)
 {
-    uint16_t mode;
-    uint8_t mode_count = 1;
+    int16_t mode;
     uint8_t count = 1;
+    uint8_t max_count = 1;
 
     for (int i = 1; i < n; i++)
     {
@@ -29,14 +31,14 @@ int16_t mode (int16_t *sample, uint8_t n)
       else
         count = 1;
 
-      if (count > mode_count)  // current sequence is the longest
+      if (count > max_count)  // current sequence is the longest
       {
-          mode_count = count;
+          max_count = count;
           mode = sample[i];
       }
-      else if (count == mode_count)
+      else if (count == max_count)
       {
-        mode = sample[(n/2)];  // use median if no sequence or bimodal
+        mode = sample[(n/2)];  // use median if no sequence > 1 or bimodal
       }
     }
 
@@ -59,7 +61,7 @@ int16_t takeReading (void)
 				Serial.print (sampleCount);
 				Serial.print (F(": "));
 				Serial.println (sample[sampleCount]);
-				wait (50);
+				wait (100);
 		}
 
 		int16_t sampleMode = mode (sample, SAMPLES);

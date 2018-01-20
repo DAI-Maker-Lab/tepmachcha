@@ -73,7 +73,8 @@ void eepromWrite(void)
 
   for (x = 0; x < 12 && file_name[x] != 0; x++)
   {
-    EEPROM.write( (EEPROM_FILENAME_ADDR - x), file_name[x] );
+    //if (EEPROM.read( (EEPROM_FILENAME_ADDR - x) != file_name[x] ))
+      EEPROM.write( (EEPROM_FILENAME_ADDR - x), file_name[x] );
   }
   EEPROM.write(E2END, 0); // 0 triggers an attempt to flash from SD card on power-on or reset
 }

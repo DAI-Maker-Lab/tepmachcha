@@ -214,46 +214,99 @@ char *parseFilename(char *b)
 }
 
 
-
-/*
-smsParse(uint8_t NumSMS)
+#define SIZEOF_SMS 80
+#define SIZEOF_SMS_SENDER 18
+void smsParse(uint8_t NumSMS)
 {
 		char smsBuffer[SIZEOF_SMS];
 		char smsSender[SIZEOF_SMS_SENDER];
+		uint16_t smsLen;
 
-				fona.readSMS (NumSMS, smsBuffer, sizeof(smsBuffer)-1, &smsLen);  // retrieve the most recent one
-				wait (500);                                                      // required delay
+    fona.readSMS (NumSMS, smsBuffer, sizeof(smsBuffer)-1, &smsLen);  // retrieve the most recent one
+    wait (500);                                                      // required delay
 
-				fona.getSMSSender (NumSMS, smsSender, sizeof(smsSender)-1);      // get sender
-				wait (500);
+    fona.getSMSSender (NumSMS, smsSender, sizeof(smsSender)-1);      // get sender
+    wait (500);
 
-				Serial.print (F("Message from "));
-				Serial.print (smsSender);
-				Serial.println (F(":"));
-				Serial.println (smsBuffer);
+    Serial.print (F("Message from "));
+    Serial.print (smsSender);
+    Serial.println (F(":"));
+    Serial.println (smsBuffer);
 
+    // FOTAPASSWD <filename> <filesize>
+    if (strncmp_P(smsBuffer, (prog_char*)F(FOTAPASSWORD), sizeof(FOTAPASSWORD)-1) == 0) //  FOTA password...
+    {
+        // read filename, size, cksum
+        Serial.println(F("Received FOTA request"));
+
+        char *b = parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
+
+        while (*b == ' ') b++;     // skip spaces
+
+        // read file size
+        file_size = 0;
+        while (*b >= '0' && *b <= '9') {
+          file_size = (file_size * 10) + (*b - '0');
+          b++;
+        }
+
+        Serial.print(F("filename:")); Serial.println(file_name);
+        Serial.print(F("size:")); Serial.println(file_size);
+
+        uint8_t status;
+        if (!(status = firmwareGet()))   // If at first we dont succeed
+        {
+          fonaOn();                      // try again
+          status = firmwareGet();
+        }
+
+        sprintf_P(smsBuffer, (prog_char *)F("ftp %s (%d) ok:%d, err:%d, crc:%d"), \
+          file_name, file_size, status, error, 0);
+        fona.sendSMS(smsSender, smsBuffer);  // return file stat, status
+    }
+
+    // FLASHPASSWD <filename>
+    if (strncmp_P(smsBuffer, (prog_char*)F(FLASHPASSWORD), sizeof(FLASHPASSWORD)-1) == 0) //  FOTA password...
+    {
+        parseFilename( smsBuffer + sizeof(FLASHPASSWORD) );
+
+        eepromWrite();
+        reflash();
+    }
+
+    // PINGPASSWORD
+    if (strcmp_P(smsBuffer, (prog_char*)F(PINGPASSWORD)) == 0)        //  PING password...
+    {
+        sprintf_P(smsBuffer, (prog_char *)F(DEVICE " v:%d c:%d h:%d/" STR(SENSOR_HEIGHT)), \
+          batteryRead(), solarCharging(), takeReading());
+        fona.sendSMS(smsSender, smsBuffer);
+    }
+
+    // BEEPASSWORD
+    if (strcmp_P(smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
+    {
+        XBeeOn();
+        XBeeOnMessage(smsBuffer);
+        fona.sendSMS(smsSender, smsBuffer);  //  Tell the sender what you've done
+        Serial.println (F("XBee turned on by SMS."));
+    }
 }
-*/
 
 
-#define SIZEOF_SMS 80
-#define SIZEOF_SMS_SENDER 18
 //  Check SMS messages received for any valid commands
 void smsCheck (void)
 {
-		char smsBuffer[SIZEOF_SMS];
-		char smsSender[SIZEOF_SMS_SENDER];
-		uint32_t timeout = (millis() + 60000);
+		uint32_t timeout;
 		int8_t NumSMS;
-		uint16_t smsLen;
 
 		fonaFlush();    //  Flush out any unresolved data
 		Serial.println (F("Checking for SMS messages..."));
 
-		do {
-				NumSMS = fona.getNumSMS();    // -1 for error
-				wait (5000);
-		} while (NumSMS == 0 && millis() <= timeout);
+		timeout = millis() + 60000;       // it can take a while for fona to receive queued SMS
+    do {
+        NumSMS = fona.getNumSMS();    // -1 for error
+        wait (5000);
+    } while (NumSMS == 0 && millis() <= timeout);
 
 		Serial.print (NumSMS);
 		Serial.println (F(" message(s) waiting."));
@@ -261,87 +314,21 @@ void smsCheck (void)
     // For each SMS message
 		while (NumSMS > 0)
 		{
-				fona.readSMS (NumSMS, smsBuffer, sizeof(smsBuffer)-1, &smsLen);  // retrieve the most recent one
-				wait (500);                                                      // required delay
+      smsParse(NumSMS);
 
-				fona.getSMSSender (NumSMS, smsSender, sizeof(smsSender)-1);      // get sender
-				wait (500);
+      wait (1000);
+      fona.deleteSMS (NumSMS);
+      wait (1500);
+      NumSMS = fona.getNumSMS();
 
-				Serial.print (F("Message from "));
-				Serial.print (smsSender);
-				Serial.println (F(":"));
-				Serial.println (smsBuffer);
+      Serial.print(F("# SMS: ")); Serial.println(NumSMS);
 
-        // FOTAPASSWD <filename> <filesize>
-				if (strncmp_P(smsBuffer, (prog_char*)F(FOTAPASSWORD), sizeof(FOTAPASSWORD)-1) == 0) //  FOTA password...
-        {
-            // read filename, size, cksum
-            Serial.println(F("Received FOTA request"));
-
-            char *b = parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
-
-            while (*b == ' ') b++;     // skip spaces
-
-            // read file size
-            file_size = 0;
-            while (*b >= '0' && *b <= '9') {
-              file_size = (file_size * 10) + (*b - '0');
-              b++;
-            }
-
-            Serial.print(F("filename:")); Serial.println(file_name);
-            Serial.print(F("size:")); Serial.println(file_size);
-
-            uint8_t status;
-            if (!(status = firmwareGet()))   // If at first we dont succeed
-            {
-              fonaOn();                      // try again
-              status = firmwareGet();
-            }
-
-            sprintf_P(smsBuffer, (prog_char *)F("ftp %s (%d) ok:%d, err:%d, crc:%d"), \
-              file_name, file_size, status, error, 0);
-            fona.sendSMS(smsSender, smsBuffer);  // return file stat, status
-        }
-
-        // FLASHPASSWD <filename>
-				if (strncmp_P(smsBuffer, (prog_char*)F(FLASHPASSWORD), sizeof(FLASHPASSWORD)-1) == 0) //  FOTA password...
-        {
-            parseFilename( smsBuffer + sizeof(FLASHPASSWORD) );
-            eepromWrite();
-            reflash();
-        }
-
-        // PINGPASSWORD
-				if (strcmp_P(smsBuffer, (prog_char*)F(PINGPASSWORD)) == 0)        //  PING password...
-        {
-            sprintf_P(smsBuffer, (prog_char *)F(DEVICE " v:%d c:%d h:%d/" STR(SENSOR_HEIGHT)), \
-              batteryRead(), solarCharging(), takeReading());
-            fona.sendSMS(smsSender, smsBuffer);
-        }
-
-        // BEEPASSWORD
-				if (strcmp_P(smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
-				{
-            XBeeOn();
-            XBeeOnMessage(smsBuffer);
-            fona.sendSMS(smsSender, smsBuffer);  //  Tell the sender what you've done
-            Serial.println (F("XBee turned on by SMS."));
-				}
-
-				wait (1000);
-				fona.deleteSMS (NumSMS);
-				wait (1500);
-				NumSMS = fona.getNumSMS();
-
-        Serial.print(F("# SMS: ")); Serial.println(NumSMS);
-
-				// Occasionally messages won't delete and this loops forever. If
-				// the process takes too long we'll just nuke everything.
-				if (millis() >= timeout)
-				{
-          smsDeleteAll();
-          break;
-				}
+      // Occasionally messages won't delete and this loops forever. If
+      // the process takes too long we'll just nuke everything.
+      if (millis() >= timeout)
+      {
+        smsDeleteAll();
+        break;
+      }
 		}
 }

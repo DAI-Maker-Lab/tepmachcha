@@ -13,16 +13,18 @@
 void setup(void);
 void loop(void);
 void upload(void);
-void wait(unsigned long);
-uint16_t batteryRead(void);
-int16_t takeReading(void);
-boolean sendReading(uint16_t);
 boolean dmisPost(int, boolean,  uint16_t);
 boolean ews1294Post (int, boolean, uint16_t);
+
+// sonar
+int16_t takeReading(void);
+
+// stalker
+uint16_t batteryRead(void);
 boolean solarCharging(void);
+void wait (uint32_t);
 
 // fona
-void clockSet(void);
 void fonaFlush(void);
 char fonaRead(void);
 boolean fonaOn(void);
@@ -37,6 +39,15 @@ void smsDeleteAll(void);
 void smsCheck(void);
 void checkSMS(void);
 boolean fonaSendCheckOK(const __FlashStringHelper*);
+
+// rtc
+void clockSet(void);
+void clockSet3(void);
+
+// XBee
+void XBeeOn();
+void XBeeOnMessage(char *);
+void XBee(void);
 
 // ota
 uint32_t crc_update(uint32_t, uint8_t);
@@ -55,11 +66,6 @@ boolean firmwareGet();
 extern char file_name[];
 extern uint16_t file_size;
 extern uint8_t error;
-
-// XBee
-void XBeeOn();
-void XBeeOnMessage(char *);
-void XBee(void);
 
 // test
 int freeRam(void);

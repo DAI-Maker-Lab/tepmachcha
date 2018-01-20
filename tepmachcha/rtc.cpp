@@ -3,6 +3,8 @@
 DateTime now;
 DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 
+
+/*
 #define YEAR   in->year
 #define MONTH  in->month
 #define DAY    in->day
@@ -10,7 +12,6 @@ DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 #define MINUTE in->minute
 #define SECOND in->second
 
-/*
 void clockSet2 (void)
 {
     int16_t values[7];
@@ -200,13 +201,13 @@ void clockSet (void)
 }
 
 
-void fonaReadTime(DateTime *dt)
+
+boolean fonaReadTime(DateTime *dt)
 {
     uint16_t y;
     uint8_t m, d, hh, mm, ss;
 
     y = fona.parseInt();
-
     m = fona.parseInt();
     d = fona.parseInt();
     hh = fona.parseInt();
@@ -214,4 +215,54 @@ void fonaReadTime(DateTime *dt)
     ss = fona.parseInt();
 
     if (y > 2000) { y -= 2000; }  // Adjust from YYYY to YY
+
+		if (y < 18 || y > 50 || hh > 23 || mm > 59 || ss > 59)
+      return false;
+
+    DateTime tmp(y, m, d, hh, mm, ss, 0);
+    *dt = tmp;
+    return true;
 }
+
+
+boolean fonaGsmLoc(void)
+{
+    return fona.sendCheckReply (F("AT+CIPGSMLOC=2,1"), OK);    //  Query GSM location service for time
+		fona.parseInt();                    //  Ignore first int - should be status (0)
+}
+
+
+void clockSet3 (void)
+{
+    boolean status;
+    DateTime dt;
+
+		Serial.println (F("Fetching GSM time"));
+		wait (1000);      //  Give time for any trailing data to come in from FONA
+		fonaFlush();      //  Flush any trailing data
+
+    fonaGsmLoc();
+		fona.parseInt();  //  Ignore second int -- necessary on some networks/towers
+    if (!(status = fonaReadTime(&dt)))
+    {
+      fonaGsmLoc();   // try again without ignoring second int
+      status = fonaReadTime(&dt);
+    }
+    if (!status)
+    {
+      fona.enableNTPTimeSync (true, F("0.daimakerlab.pool.ntp.org"));
+      Serial.println (F("GSM location failed, trying NTP sync"));
+      
+      wait (15000);             // Wait for NTP server response
+      
+      //AT+CCLK="31/12/00,17:59:59+22"
+      fona.println (F("AT+CCLK?")); // Query FONA's clock for resulting NTP time              
+      status = fonaReadTime(&dt);
+    }
+    if (status)
+    {
+      now = dt;
+      RTC.adjust(dt);   //  Adjust date-time as defined above
+    }
+}
+
