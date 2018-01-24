@@ -109,8 +109,10 @@ void loop (void)
 {
 
 #ifdef BUS_PWR
-    digitalWrite (BUS_PWR, HIGH);           //  Peripheral bus on
+    //digitalWrite (RANGE, LOW);              //  sonar off
+    //digitalWrite (BUS_PWR, HIGH);           //  Peripheral bus on
 #endif
+    //wait(500);
 
 		now = RTC.now();      //  Get the current time from the RTC
 
@@ -140,7 +142,7 @@ void loop (void)
 		Serial.flush();                         //  Flush any output before sleep
 
 #ifdef BUS_PWR
-    digitalWrite (BUS_PWR, LOW);           //  Peripheral bus off
+    //digitalWrite (BUS_PWR, LOW);           //  Peripheral bus off
 #endif
 		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
 		RTC.clearINTStatus();                   //  Clear any outstanding RTC interrupts

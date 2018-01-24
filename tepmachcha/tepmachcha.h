@@ -1,7 +1,7 @@
 #include "arduino-mk.h"
 
 //  Tepmachcha version number
-#define VERSION "1.3.0"
+#define VERSION "2.0.0"
 
 //  Customize this for each installation
 #include "config.h"           //  Site configuration
@@ -50,7 +50,8 @@
 #define PING     A0  //  Sonar ping pin
 #define FONA_TX  7  //  UART pin from FONA
 #define RANGE    8  //  Sonar range pin -- pull low to turn off sonar
-#define BUS_PWR  9  //  Peripheral bus power for 3.1
+
+#define BUS_PWR  9  //  Peripheral bus power for 3.1 comment out for 3.0
 
 #define FONA_RTS na //  FONA RTS pin - check
 #define FONA_KEY A2 //  FONA Key pin
@@ -89,7 +90,7 @@ extern uint16_t file_size;
 
 extern DateTime now;
 extern DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
-//extern Sleep sleep;        //  Create the sleep object
+extern Sleep sleep;        //  Create the sleep object
 
 // fona
 extern SoftwareSerial fonaSerial;

@@ -236,7 +236,7 @@ void smsParse(uint8_t NumSMS)
     // FOTAPASSWD <filename> <filesize>
     if (strncmp_P(smsBuffer, (prog_char*)F(FOTAPASSWORD), sizeof(FOTAPASSWORD)-1) == 0) //  FOTA password...
     {
-        // read filename, size, cksum
+        // read filename, size
         Serial.println(F("Received FOTA request"));
 
         char *b = parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
@@ -279,6 +279,8 @@ void smsParse(uint8_t NumSMS)
     {
         sprintf_P(smsBuffer, (prog_char *)F(DEVICE " v:%d c:%d h:%d/" STR(SENSOR_HEIGHT)), \
           batteryRead(), solarCharging(), takeReading());
+        //sprintf_P(smsBuffer, (prog_char *)F("%p v:%d c:%d h:%d/" STR(SENSOR_HEIGHT)), \
+          //F(DEVICE), batteryRead(), solarCharging(), takeReading());
         fona.sendSMS(smsSender, smsBuffer);
     }
 
@@ -306,7 +308,7 @@ void smsCheck (void)
     do {
         NumSMS = fona.getNumSMS();    // -1 for error
         wait (5000);
-    } while (NumSMS == 0 && millis() <= timeout);
+    } while (NumSMS <= 0 && millis() <= timeout);
 
 		Serial.print (NumSMS);
 		Serial.println (F(" message(s) waiting."));

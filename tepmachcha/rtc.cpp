@@ -4,95 +4,6 @@ DateTime now;
 DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 
 
-/*
-#define YEAR   in->year
-#define MONTH  in->month
-#define DAY    in->day
-#define HOUR   in->hour
-#define MINUTE in->minute
-#define SECOND in->second
-
-void clockSet2 (void)
-{
-    int16_t values[7];
-    struct {
-      int16_t year;
-      int16_t month;
-      int16_t day;
-      int16_t hour;
-      int16_t minute;
-      int16_t second;
-    } *in;
-
-		char theDate[17];
-
-		Serial.println (F("Fetching GSM time"));
-		wait (2000);    //  Give time for any trailing data to come in from FONA
-
-		fonaFlush();    //  Flush any trailing data
-		fona.sendCheckReply (F("AT+CIPGSMLOC=2,1"), OK);    //  Query GSM location service for time
-
-    // Read date elements from fona
-		fona.parseInt();                    //  Ignore first int
-    for (uint8_t i = 0; i < 7;i++) { values[i] = fona.parseInt(); }
-
-    // Set the window to the second element of the array of values read from fona
-    in = (void *)&(values[1]);
-
-    if (YEAR < 2016 || YEAR > 2050 || HOUR > 23) //  If that obviously didn't work...
-    {
-      // Set the window to the first element
-      in = (void *)&(values[0]);
-
-		  if (YEAR < 2016 || YEAR > 2050 || HOUR > 23) //  If that obviously didn't work...
-      {
-
-				Serial.println (F("GSM location failed, trying NTP sync"));
-				fona.enableNTPTimeSync (true, F("0.daimakerlab.pool.ntp.org"));
-				wait (15000);                 // Wait for NTP server response
-				
-				fona.println (F("AT+CCLK?")); // Query FONA's clock for resulting NTP time              
-
-        // Read date elements from fona
-        for (uint8_t i = 0; i < 6;i++) { values[i] = fona.parseInt(); }
-      }
-    }
-
-    if (YEAR > 2000) YEAR -= 2000;
-    if (YEAR >= 16 || YEAR <= 50 || HOUR <= 23) //  If that obviously didn't work...
-    {
-      //  Adjust UTC to local time
-      #define LOCALTIME (HOUR + UTCOFFSET)
-      if ( LOCALTIME < 0 )       // TZ takes us back a day
-      {
-        DAY--;
-        HOUR = LOCALTIME + 24;
-      }
-      else if ( LOCALTIME > 23 ) // TZ takes us to next day
-      {
-        DAY++;
-        HOUR = LOCALTIME - 24;
-      }
-      
-      Serial.print (F("Obtained current time: "));
-      sprintf_P(theDate, (prog_char*)F("%d/%d/%d %d:%d"), DAY, MONTH, YEAR, HOUR, MINUTE);
-      Serial.print (theDate);
-
-      Serial.println(F(". Adjusting RTC"));
-      DateTime dt(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, 0);
-      now = dt;
-      RTC.adjust(dt);     //  Adjust date-time as defined above
-    }
-    else
-    {
-      Serial.println (F("Network time failed, using RTC"));
-		}
-
-		wait (200);              //  Give FONA a moment to catch its breath
-}
-*/
-
-
 void clockSet (void)
 {
 		char theDate[17];
@@ -201,7 +112,96 @@ void clockSet (void)
 }
 
 
+/*
+#define YEAR   in->year
+#define MONTH  in->month
+#define DAY    in->day
+#define HOUR   in->hour
+#define MINUTE in->minute
+#define SECOND in->second
 
+void clockSet2 (void)
+{
+    int16_t values[7];
+    struct {
+      int16_t year;
+      int16_t month;
+      int16_t day;
+      int16_t hour;
+      int16_t minute;
+      int16_t second;
+    } *in;
+
+		char theDate[17];
+
+		Serial.println (F("Fetching GSM time"));
+		wait (2000);    //  Give time for any trailing data to come in from FONA
+
+		fonaFlush();    //  Flush any trailing data
+		fona.sendCheckReply (F("AT+CIPGSMLOC=2,1"), OK);    //  Query GSM location service for time
+
+    // Read date elements from fona
+		fona.parseInt();                    //  Ignore first int
+    for (uint8_t i = 0; i < 7;i++) { values[i] = fona.parseInt(); }
+
+    // Set the window to the second element of the array of values read from fona
+    in = (void *)&(values[1]);
+
+    if (YEAR < 2016 || YEAR > 2050 || HOUR > 23) //  If that obviously didn't work...
+    {
+      // Set the window to the first element
+      in = (void *)&(values[0]);
+
+		  if (YEAR < 2016 || YEAR > 2050 || HOUR > 23) //  If that obviously didn't work...
+      {
+
+				Serial.println (F("GSM location failed, trying NTP sync"));
+				fona.enableNTPTimeSync (true, F("0.daimakerlab.pool.ntp.org"));
+				wait (15000);                 // Wait for NTP server response
+				
+				fona.println (F("AT+CCLK?")); // Query FONA's clock for resulting NTP time              
+
+        // Read date elements from fona
+        for (uint8_t i = 0; i < 6;i++) { values[i] = fona.parseInt(); }
+      }
+    }
+
+    if (YEAR > 2000) YEAR -= 2000;
+    if (YEAR >= 16 || YEAR <= 50 || HOUR <= 23) //  If that obviously didn't work...
+    {
+      //  Adjust UTC to local time
+      #define LOCALTIME (HOUR + UTCOFFSET)
+      if ( LOCALTIME < 0 )       // TZ takes us back a day
+      {
+        DAY--;
+        HOUR = LOCALTIME + 24;
+      }
+      else if ( LOCALTIME > 23 ) // TZ takes us to next day
+      {
+        DAY++;
+        HOUR = LOCALTIME - 24;
+      }
+      
+      Serial.print (F("Obtained current time: "));
+      sprintf_P(theDate, (prog_char*)F("%d/%d/%d %d:%d"), DAY, MONTH, YEAR, HOUR, MINUTE);
+      Serial.print (theDate);
+
+      Serial.println(F(". Adjusting RTC"));
+      DateTime dt(YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, 0);
+      now = dt;
+      RTC.adjust(dt);     //  Adjust date-time as defined above
+    }
+    else
+    {
+      Serial.println (F("Network time failed, using RTC"));
+		}
+
+		wait (200);              //  Give FONA a moment to catch its breath
+}
+*/
+
+
+/*
 boolean fonaReadTime(DateTime *dt)
 {
     uint16_t y;
@@ -265,4 +265,4 @@ void clockSet3 (void)
       RTC.adjust(dt);   //  Adjust date-time as defined above
     }
 }
-
+*/
