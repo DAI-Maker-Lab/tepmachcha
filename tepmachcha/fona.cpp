@@ -12,14 +12,18 @@ void fonaToggle(boolean state)
   {
     digitalWrite(FONA_KEY, HIGH);     // KEY should be high to start
 
-    Serial.print (F("FONA toggle .. "));
+    Serial.print (F("FONA -> "));
+    Serial.print (state);
     while (digitalRead (FONA_PS) != state) 
     {
+      if (millis() > timeout)
+      {
+        Serial.println(F(" timeout."));
+        return;
+      }
       digitalWrite(FONA_KEY, LOW);    // pulse the Key pin low
       wait (500);
       digitalWrite (FONA_KEY, HIGH);  // and then return it to high
-      if (millis() > timeout)
-        break;
     }
     Serial.println(F(" done."));
   }
@@ -37,6 +41,7 @@ void fonaOff (void)
   if (digitalRead (FONA_PS) == HIGH)           //  If the FONA is on
   {
     fona.sendCheckReply (F("AT+CPOWD=1"), OK); //  send shutdown command
+    wait(500);
     if (digitalRead (FONA_PS) == HIGH)         //  If the FONA is still on
     {
       fonaToggle(LOW);
@@ -216,7 +221,7 @@ char *parseFilename(char *b)
 
 #define SIZEOF_SMS 80
 #define SIZEOF_SMS_SENDER 18
-void smsParse(uint8_t NumSMS)
+void smsParse(int8_t NumSMS)
 {
 		char smsBuffer[SIZEOF_SMS];
 		char smsSender[SIZEOF_SMS_SENDER];
@@ -237,7 +242,7 @@ void smsParse(uint8_t NumSMS)
     if (strncmp_P(smsBuffer, (prog_char*)F(FOTAPASSWORD), sizeof(FOTAPASSWORD)-1) == 0) //  FOTA password...
     {
         // read filename, size
-        Serial.println(F("Received FOTA request"));
+        Serial.println(F("FOTA"));
 
         char *b = parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
 
@@ -268,6 +273,7 @@ void smsParse(uint8_t NumSMS)
     // FLASHPASSWD <filename>
     if (strncmp_P(smsBuffer, (prog_char*)F(FLASHPASSWORD), sizeof(FLASHPASSWORD)-1) == 0) //  FOTA password...
     {
+        Serial.println(F("Flash"));
         parseFilename( smsBuffer + sizeof(FLASHPASSWORD) );
 
         eepromWrite();
@@ -277,6 +283,7 @@ void smsParse(uint8_t NumSMS)
     // PINGPASSWORD
     if (strcmp_P(smsBuffer, (prog_char*)F(PINGPASSWORD)) == 0)        //  PING password...
     {
+        Serial.println(F("PING"));
         sprintf_P(smsBuffer, (prog_char *)F(DEVICE " v:%d c:%d h:%d/" STR(SENSOR_HEIGHT)), \
           batteryRead(), solarCharging(), takeReading());
         //sprintf_P(smsBuffer, (prog_char *)F("%p v:%d c:%d h:%d/" STR(SENSOR_HEIGHT)), \
@@ -321,8 +328,8 @@ void smsCheck (void)
       wait (1000);
       fona.deleteSMS (NumSMS);
       wait (1500);
-      NumSMS = fona.getNumSMS();
 
+      NumSMS = fona.getNumSMS();
       Serial.print(F("# SMS: ")); Serial.println(NumSMS);
 
       // Occasionally messages won't delete and this loops forever. If

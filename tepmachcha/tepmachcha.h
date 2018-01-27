@@ -1,7 +1,7 @@
 #include "arduino-mk.h"
 
 //  Tepmachcha version number
-#define VERSION "2.0.0"
+#define VERSION "2.0.1"
 
 //  Customize this for each installation
 #include "config.h"           //  Site configuration
@@ -47,7 +47,7 @@
 #define SD_POWER 4  //  optional power to SD card
 #define BEEPIN   5  //  XBee power pin
 #define FONA_RX  6  //  UART pin into FONA
-#define PING     A0  //  Sonar ping pin
+#define PING     A0 //  Sonar ping pin
 #define FONA_TX  7  //  UART pin from FONA
 #define RANGE    8  //  Sonar range pin -- pull low to turn off sonar
 

@@ -51,6 +51,7 @@ uint16_t batteryRead(void)
 //
 // Detect status of the CN3065 charge-controller 'charging' and 'done' pins,
 // which have a voltage divider between vbatt and status pins:
+//
 //  vbatt----10M----+-----+---1M----DONE
 //                  |     |
 //             SOLAR(A6)  +---2M----CHARGING
@@ -59,9 +60,9 @@ uint16_t batteryRead(void)
 //
 // AREF      1.1    3.3
 // =====    ====   ====
-// ERROR      0+     0+
-// DONE     350+   115+  ( vbatt(4.2v) / (10M + 1M)/1M ) => 0.38v
-// CHARGING 550+   180+  ( vbatt(3.6v+) / (10M + 2M)/2M ) => 0.6v
+// ERROR      0-     0-
+// DONE     350-   115-  ( vbatt(4.2v) / (10M + 1M)/1M ) => 0.38v
+// CHARGING 550-   180-  ( vbatt(3.6v+) / (10M + 2M)/2M ) => 0.6v
 // SLEEPING 900+   220+  ( vbatt ) => 3.6v -> 4.2v
 boolean solarCharging(void)
 {
@@ -74,6 +75,9 @@ boolean solarCharging(void)
 
     Serial.print (F("solar analog: "));
     Serial.println (solar);
-    return ( solar > 180 && solar <= 220 );  // 3.3v analogue ref
+    if ( solar > 180 && solar <= 220 )    // charging, 3.3v analogue ref
+    {
+       return true;
+    };
 }
 

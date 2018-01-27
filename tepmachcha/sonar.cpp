@@ -61,7 +61,7 @@ int16_t takeReading (void)
 				Serial.print (sampleCount);
 				Serial.print (F(": "));
 				Serial.println (sample[sampleCount]);
-				wait (100);
+				wait (50);
 		}
 
 		int16_t sampleMode = mode (sample, SAMPLES);

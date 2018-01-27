@@ -45,10 +45,6 @@ void setup (void)
     digitalWrite (BUS_PWR, HIGH);        // Peripheral bus on
 #endif
 
-    // Set RTC interrupt handler
-		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
-		interrupts();
-
 		/*  If the voltage at startup is less than 3.5V, we assume the battery died in the field
 		 *  and the unit is attempting to restart after the panel charged the battery enough to
 		 *  do so. However, running the unit with a low charge is likely to just discharge the
@@ -72,6 +68,9 @@ void setup (void)
 				sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 		}
 
+    // Set RTC interrupt handler
+		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
+		interrupts();
 
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		if (fonaOn())
@@ -91,9 +90,6 @@ void setup (void)
 
 		now = RTC.now();    //  Get the current time from the RTC
 
-    //RTC.enableInterrupts2 ((now.hour() + 1) % 24, 0); // Set daily reset alarm 
-    //RTC.enableInterrupts2 (12, 0);     // Set daily reset alarm 
-
 		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
 		RTC.clearINTStatus();                //  Clear any outstanding interrupts
 		
@@ -109,10 +105,9 @@ void loop (void)
 {
 
 #ifdef BUS_PWR
-    //digitalWrite (RANGE, LOW);              //  sonar off
     //digitalWrite (BUS_PWR, HIGH);           //  Peripheral bus on
-#endif
     //wait(500);
+#endif
 
 		now = RTC.now();      //  Get the current time from the RTC
 
@@ -144,8 +139,10 @@ void loop (void)
 #ifdef BUS_PWR
     //digitalWrite (BUS_PWR, LOW);           //  Peripheral bus off
 #endif
+
 		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
 		RTC.clearINTStatus();                   //  Clear any outstanding RTC interrupts
+    wait(10);
 		sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 }
 
@@ -155,6 +152,8 @@ void upload()
 
   int16_t streamHeight;
   uint8_t status;
+  boolean charging;
+  uint16_t voltage;
 
   if (fonaOn())
   {
@@ -165,22 +164,24 @@ void upload()
      *	plastic bag that blew onto the enclosure, for example.
      *  We send the result anyway, as the alternative is send nothing
      */
-
     if ((streamHeight = takeReading()) <= 0)
     {
       streamHeight = takeReading();     // take a second reading
     }
 
-    //status = ews1294Post(streamHeight, solarCharging(), fonaBattery());
-    if (!(status = ews1294Post(streamHeight, solarCharging(), fonaBattery())))
+    charging = solarCharging();
+    voltage = fonaBattery();
+
+    if (!(status = ews1294Post(streamHeight, charging, voltage)))
     {
-      status = ews1294Post(streamHeight, solarCharging(), fonaBattery()); // try again
+      status = ews1294Post(streamHeight, charging, voltage);    // try once more
     }
 
     // reset fona if upload failed
     if (!status)
     {
       fonaOff();
+      wait(2000);
       fonaOn();   // we don't need GPRS for the SMS check itself, but do for FTP.
     }
 
@@ -231,7 +232,6 @@ boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
       }
     }
 
-    fonaFlush();
     fona.HTTP_POST_end();
 
     if (status_code == 200)
@@ -246,6 +246,7 @@ boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
         return false;
     }
 }
+
 /*
 boolean ews1294Post2 (int16_t streamHeight, boolean solar, uint16_t voltage)
 {
