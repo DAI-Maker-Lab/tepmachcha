@@ -13,33 +13,33 @@ void wait (uint32_t period)
 }
 
 
-/* Get battery reading on ADC pin BATT, in mV
- *
- * VBAT is divided by a 10k/2k voltage divider (ie /6) to BATT, which is then
- * measured relative to AREF, on a scale of 0-1023, so
- *
- *   mV = BATT * (AREF * ( (10+2)/2 ) / 1.023)
- *
- * We use integer math to avoid including ~1.2K of FP library
- * AREF ADC->mV factor   approx integer fraction
- * ==== ==============   =======================
- * 1.1      6.45          1651/256 (~103/16)
- * 3.3     19.35          4955/256 (~155/8)
- *
- * Note, if we ONLY needed to compare the ADC reading to a FIXED voltage,
- * we'd simplify by letting the compiler calculate the equivalent 0-1023 value
- * at compile time, and compare against that directly.
- * eg to check voltage is < 3500mV:
- *   if (analogueRead(BATT) < 3500/19.35) {...}
- *
- * Also the calculations don't need to be too accurate, because the ADC
- * itself can be be quite innacurate (up to 10% with internal AREF!)
- */
+// Get battery reading on ADC pin BATT, in mV
+//
+// VBAT is divided by a 10k/2k voltage divider (ie /6) to BATT, which is then
+// measured relative to AREF, on a scale of 0-1023, so
+//
+//   mV = BATT * (AREF * ( (10+2)/2 ) / 1.023)
+//
+// We use integer math to avoid including ~1.2K of FP library
+// AREF ADC->mV factor   approx integer fraction
+// ==== ==============   =======================
+// 1.1      6.45          1651/256 (~103/16)
+// 3.3     19.35          4955/256 (~155/8)
+//
+// Note, if we ONLY needed to compare the ADC reading to a FIXED voltage,
+// we'd simplify by letting the compiler calculate the equivalent 0-1023 value
+// at compile time, and compare against that directly.
+// eg to check voltage is < 3500mV:
+//   if (analogueRead(BATT) < 3500/19.35) {...}
+//
+// Also the calculations don't need to be too accurate, because the ADC
+// itself can be be quite innacurate (up to 10% with internal AREF!)
+//
 uint16_t batteryRead(void)
 {
   uint32_t mV = 0;
 
-  for (uint8_t i = 155; i;i--)
+  for (uint8_t i = 0; i < 155; i++)
   {
     mV += analogRead(BATT);
   }
@@ -64,6 +64,7 @@ uint16_t batteryRead(void)
 // DONE     350-   115-  ( vbatt(4.2v) / (10M + 1M)/1M ) => 0.38v
 // CHARGING 550-   180-  ( vbatt(3.6v+) / (10M + 2M)/2M ) => 0.6v
 // SLEEPING 900+   220+  ( vbatt ) => 3.6v -> 4.2v
+//
 boolean solarCharging(void)
 {
     uint16_t solar;

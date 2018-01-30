@@ -73,20 +73,20 @@ void clockSet (void)
                 netMonth = 12;
                 netYear--;
               }
-              netDay = daysInMonth[netMonth];
+              netDay = daysInMonth[netMonth-1];
             }
 				}
 				else if (localtime > 23)              // TZ takes us to the next day
         {
             netHour = localtime - 24;         // hour % 24
-            if (++netDay > daysInMonth[netMonth]) // adjust the date to UTC + 1
+            if (++netDay > daysInMonth[netMonth-1]) // adjust the date to UTC + 1
             {
-              netDay = 1;
               if (++netMonth > 12)
               {
                  netMonth = 1;
                  netYear++;
               }
+              netDay = 1;
             }
         }
         else                                  // TZ is same day
@@ -94,18 +94,18 @@ void clockSet (void)
             netHour = localtime;              // simply add TZ offset
         }
 
-				Serial.print (F("Obtained current time: "));
+
+				Serial.print (F("Net time: "));
 				sprintf_P(theDate, (prog_char*)F("%d/%d/%d %d:%d"), netDay, netMonth, netYear, netHour, netMinute);
 				Serial.print (theDate);
 
 				Serial.println(F(". Adjusting RTC"));
 				DateTime dt(netYear, netMonth, netDay, netHour, netMinute, netSecond, 0);
-        now = dt;
 				RTC.adjust(dt);     //  Adjust date-time as defined above
 		}
 		else
 		{
-				Serial.println (F("Time sync failed, using RTC"));
+				Serial.println (F("Sync failed, using RTC"));
 		}
 
 		wait (200);              //  Give FONA a moment to catch its breath

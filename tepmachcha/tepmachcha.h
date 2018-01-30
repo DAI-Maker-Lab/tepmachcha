@@ -1,7 +1,7 @@
 #include "arduino-mk.h"
 
 //  Tepmachcha version number
-#define VERSION "2.0.1"
+#define VERSION "2.0.2"
 
 //  Customize this for each installation
 #include "config.h"           //  Site configuration
@@ -36,7 +36,7 @@
 #define FONA_RTS A1 //  FONA RTS pin
 #define FONA_KEY A2 //  FONA Key pin
 #define FONA_PS  A3 //  FONA power status pin
-#define SOLAR    A6 //  Solar level
+#define SOLAR    A6 //  Solar charge state
 #define BATT     A7 //  Battery level
 */
 
@@ -56,7 +56,7 @@
 #define FONA_RTS na //  FONA RTS pin - check
 #define FONA_KEY A2 //  FONA Key pin
 #define FONA_PS  A3 //  FONA power status pin
-#define SOLAR    A6 //  Solar level
+#define SOLAR    A6 //  Solar charge state
 #define BATT     A7 //  Battery level
 
 #define DEBUG_RAM     ram();

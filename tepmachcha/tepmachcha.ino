@@ -142,7 +142,6 @@ void loop (void)
 
 		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
 		RTC.clearINTStatus();                   //  Clear any outstanding RTC interrupts
-    wait(10);
 		sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 }
 
@@ -182,7 +181,7 @@ void upload()
     {
       fonaOff();
       wait(2000);
-      fonaOn();   // we don't need GPRS for the SMS check itself, but do for FTP.
+      fonaOn();
     }
 
     // process SMS messages
@@ -203,6 +202,7 @@ boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
 
     // Construct the body of the POST request:
     sprintf_P (post_data,
+        //(prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"version\":\"" VERSION "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
         (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
           streamHeight,
           solar,

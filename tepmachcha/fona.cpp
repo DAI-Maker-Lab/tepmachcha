@@ -6,7 +6,7 @@ Adafruit_FONA fona = Adafruit_FONA (FONA_RST);
 
 void fonaToggle(boolean state)
 {
-  uint32_t timeout = millis() + 4000;
+  uint32_t timeout = millis() + 4500;
 
   if (digitalRead (FONA_PS) != state) // If FONA not in desired state
   {
@@ -24,6 +24,7 @@ void fonaToggle(boolean state)
       digitalWrite(FONA_KEY, LOW);    // pulse the Key pin low
       wait (500);
       digitalWrite (FONA_KEY, HIGH);  // and then return it to high
+      wait (500);
     }
     Serial.println(F(" done."));
   }
@@ -62,7 +63,7 @@ boolean fonaPowerOn(void)
 
 boolean fonaSerialOn(void)
 {
-    Serial.println (F("Initializing FONA"));
+    Serial.println (F("FONA Serial"));
 
     fonaSerial.begin (4800);                      //  Open a serial interface to FONA
 
@@ -89,7 +90,7 @@ boolean fonaGSMOn(void) {
       return true;
     }
   }
-  Serial.println (F("timed out. Check SIM card, antenna, and signal."));
+  Serial.println (F("timed out. Check SIM, antenna, signal."));
   return false;
 }
 
@@ -128,15 +129,16 @@ boolean fonaGPRSOn(void) {
 
 
 void fonaGPRSOff(void) {
-  if (fona.enableGPRS (false) == false)
+  Serial.print (F("Turning GPRS off: "));
+  if (fona.GPRSstate() == 1)
   {
-    if (fona.GPRSstate() == 1)
+    if (!fona.enableGPRS(false))
     {
-      Serial.println (F("GPRS Off Failed"));
+      Serial.println (F("failed"));
       return;
     }
   }
-  Serial.println (F("GPRS is off."));
+  Serial.println (F("done"));
 }
 
 
