@@ -403,14 +403,14 @@ boolean dweetPost (int16_t streamHeight, boolean solar, uint16_t voltage)
     // HTTP POST headers
     fona.sendCheckReply (F("AT+HTTPINIT"), OK);
     fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
-    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"dweet.io/dweet/quietly/for/" EWSDEVICE_ID "\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"dweet.io/dweet/quietly/for/" DWEETDEVICE_ID "\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
 
     // json data
     sprintf_P(postData,
-      (prog_char*)F("{\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"uptime\":%ld,\"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam:\"%d}"),
+      (prog_char*)F("{\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"uptime\":%ld,\"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam\":%d}"),
         streamHeight,
         solar,
         voltage,
