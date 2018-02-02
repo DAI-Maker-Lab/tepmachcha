@@ -94,7 +94,6 @@ void clockSet (void)
             netHour = localhour;              // simply add TZ offset
         }
 
-
 				Serial.print (F("Net time: "));
 				sprintf_P(theDate, (prog_char*)F("%d/%d/%d %d:%d"), netDay, netMonth, netYear, netHour, netMinute);
 				Serial.print (theDate);

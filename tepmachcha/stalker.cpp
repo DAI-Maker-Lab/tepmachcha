@@ -79,7 +79,7 @@ boolean solarCharging(void)
     if ( solar > 180 && solar <= 220 )    // charging, 3.3v analogue ref
     {
        return true;
-    };
+    }
     return false;
 }
 
