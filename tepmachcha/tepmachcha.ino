@@ -178,6 +178,7 @@ void upload()
     charging = solarCharging();
     voltage = fonaBattery();
 
+    dweetPost(streamHeight, charging, voltage);
     if (!(status = ews1294Post(streamHeight, charging, voltage)))
     {
       status = ews1294Post(streamHeight, charging, voltage);    // try once more
@@ -203,16 +204,16 @@ boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
 {
     uint16_t status_code = 0;
     uint16_t response_length = 0;
-    char post_data[200];
+    char post_data[240];
 
     DEBUG_RAM
 
     // Construct the body of the POST request:
     sprintf_P (post_data,
         // uptime, freeRam, analogCharge, version, internalTemp, RSSI, statusCode
-        //(prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"version\":\"" VERSION "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
+        (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"version\":\"" VERSION "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
 
-        (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
+        //(prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
           streamHeight,
           solar,
           voltage,
@@ -339,7 +340,10 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
     // HTTP POST headers
     fona.sendCheckReply (F("AT+HTTPINIT"), OK);
     //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
+
+    //TODO don't need http:// in url, in fact it breaks when using https://
     fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
+
     fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
@@ -357,6 +361,68 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
         solar,
         voltage,
         now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
+    int s = strlen(postData);
+
+    // tell fona to receive data, and how much
+    Serial.print (F("data size:")); Serial.println (s);
+    fona.print (F("AT+HTTPDATA=")); fona.print (s);
+    fona.println (F(",2000")); // timeout
+    fona.expectReply (OK);
+
+    // send data
+    Serial.print(postData);
+    fona.print(postData);
+    delay(100);
+
+    // do the POST request
+    fona.HTTP_action (1, &statusCode, &dataLen, 10000);
+
+    // report status, response data
+    Serial.print (F("http code: ")); Serial.println (statusCode);
+    Serial.print (F("reply len: ")); Serial.println (dataLen);
+    if (dataLen > 0)
+    {
+      fona.sendCheckReply (F("AT+HTTPREAD"), OK);
+      delay(1000);
+    }
+
+    fonaFlush();
+    fona.HTTP_POST_end();
+
+    return (statusCode == 201);
+}
+
+
+boolean dweetPost (int16_t streamHeight, boolean solar, uint16_t voltage)
+{
+    uint16_t statusCode;
+    uint16_t dataLen;
+    char postData[200];
+    DEBUG_RAM
+
+    // HTTP POST headers
+    fona.sendCheckReply (F("AT+HTTPINIT"), OK);
+    fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
+    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"dweet.io/dweet/quietly/for/tepPP1\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
+    fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
+
+    // Note the data_source should match the last element of the url,
+    // which must be a valid data_source
+    // To add multiple user headers:
+    //   http://forum.sodaq.com/t/how-to-make-https-get-and-post/31/18
+    //fona.sendCheckReply (F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer " DMISAPIBEARER "\""), OK);
+
+    // json data
+    sprintf_P(postData,
+      (prog_char*)F("{\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"uptime\":%ld,\"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam:\"%d}"),
+        streamHeight,
+        solar,
+        voltage,
+        millis(),
+        internalTemp(),
+        freeRam());
     int s = strlen(postData);
 
     // tell fona to receive data, and how much

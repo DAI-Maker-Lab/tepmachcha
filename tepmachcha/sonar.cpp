@@ -68,14 +68,6 @@ int16_t takeReading (void)
     // sort the samples
 		sort (sample, SAMPLES);
 
-    for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
-    {
-      Serial.print (F("sorted "));
-      Serial.print (sampleCount);
-      Serial.print (F(": "));
-      Serial.println (sample[sampleCount]);
-    }
-
     // take the mode, or median
     int16_t sampleMode = mode (sample, SAMPLES);
 

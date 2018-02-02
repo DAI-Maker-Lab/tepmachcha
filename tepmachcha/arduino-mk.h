@@ -15,6 +15,8 @@ void loop(void);
 void upload(void);
 boolean dmisPost(int, boolean,  uint16_t);
 boolean ews1294Post (int, boolean, uint16_t);
+boolean dweetPost (int, boolean, uint16_t);
+
 
 // sonar
 int16_t takeReading(void);
@@ -23,6 +25,7 @@ int16_t takeReading(void);
 uint16_t batteryRead(void);
 boolean solarCharging(void);
 void wait (uint32_t);
+int16_t internalTemp(void);
 
 // fona
 void fonaFlush(void);
