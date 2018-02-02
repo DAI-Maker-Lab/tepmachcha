@@ -18,14 +18,13 @@ void fonaToggle(boolean state)
     {
       if (millis() > timeout)
       {
-        Serial.println(F(" timeout."));
-        return;
+        Serial.print(F(" timeout."));
+        break;
       }
       digitalWrite(FONA_KEY, LOW);    // pulse the Key pin low
-      wait (500);
-      digitalWrite (FONA_KEY, HIGH);  // and then return it to high
-      wait (500);
+      wait (250);
     }
+    digitalWrite (FONA_KEY, HIGH);    // then return it to high
     Serial.println(F(" done."));
   }
 }

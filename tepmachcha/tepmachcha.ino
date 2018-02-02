@@ -209,7 +209,9 @@ boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
 
     // Construct the body of the POST request:
     sprintf_P (post_data,
+        // uptime, freeRam, analogCharge, version, internalTemp, RSSI, statusCode
         //(prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"version\":\"" VERSION "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
+
         (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
           streamHeight,
           solar,

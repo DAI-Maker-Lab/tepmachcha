@@ -49,46 +49,46 @@ int16_t mode (int16_t *sample, uint8_t n)
 #define SAMPLES 11
 int16_t takeReading (void)
 {
-		int16_t sample[SAMPLES];
-		
+    int16_t sample[SAMPLES];
+
     digitalWrite (RANGE, HIGH);           //  sonar on
     wait (1000);
 
     // read samples into array
-		for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
-		{
-				sample[sampleCount] = pulseIn (PING, HIGH);
-				Serial.print (F("Sample "));
-				Serial.print (sampleCount);
-				Serial.print (F(": "));
-				Serial.println (sample[sampleCount]);
-				wait (50);
-		}
+    for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
+    {
+      sample[sampleCount] = pulseIn (PING, HIGH);
+      Serial.print (F("Sample "));
+      Serial.print (sampleCount);
+      Serial.print (F(": "));
+      Serial.println (sample[sampleCount]);
+      wait (50);
+    }
 
     // sort the samples
 		sort (sample, SAMPLES);
 
-		for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
+    for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
     {
-				Serial.print (F("sorted "));
-				Serial.print (sampleCount);
-				Serial.print (F(": "));
-				Serial.println (sample[sampleCount]);
+      Serial.print (F("sorted "));
+      Serial.print (sampleCount);
+      Serial.print (F(": "));
+      Serial.println (sample[sampleCount]);
     }
 
     // take the mode, or median
-		int16_t sampleMode = mode (sample, SAMPLES);
+    int16_t sampleMode = mode (sample, SAMPLES);
 
     // offset by programmed stream-bed height
-		int16_t streamHeight = (SENSOR_HEIGHT - (sampleMode / 10)); //  1 µs pulse = 1mm distance
+    int16_t streamHeight = (SENSOR_HEIGHT - (sampleMode / 10)); //  1 µs pulse = 1mm distance
 
-		Serial.print (F("Surface distance from sensor is "));
-		Serial.print (sampleMode);
-		Serial.println (F("mm."));
-		Serial.print (F("Calculated surface height is "));
-		Serial.print (streamHeight);
-		Serial.println (F("cm."));
+    Serial.print (F("Surface distance from sensor is "));
+    Serial.print (sampleMode);
+    Serial.println (F("mm."));
+    Serial.print (F("Calculated surface height is "));
+    Serial.print (streamHeight);
+    Serial.println (F("cm."));
 
     digitalWrite (RANGE, LOW);           //  sonar off
-		return streamHeight;
+    return streamHeight;
 }

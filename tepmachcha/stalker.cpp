@@ -80,5 +80,6 @@ boolean solarCharging(void)
     {
        return true;
     };
+    return false;
 }
 
