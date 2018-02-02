@@ -416,7 +416,7 @@ boolean dweetPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 
     // json data
     sprintf_P(postData,
-      (prog_char*)F("{\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"uptime\":%ld,\"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam:\"%d}"),
+      (prog_char*)F("{\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"uptime\":%ld,\"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam:\"%d}"),
         streamHeight,
         solar,
         voltage,
