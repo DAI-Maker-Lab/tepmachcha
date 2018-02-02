@@ -408,12 +408,6 @@ boolean dweetPost (int16_t streamHeight, boolean solar, uint16_t voltage)
     fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
 
-    // Note the data_source should match the last element of the url,
-    // which must be a valid data_source
-    // To add multiple user headers:
-    //   http://forum.sodaq.com/t/how-to-make-https-get-and-post/31/18
-    //fona.sendCheckReply (F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer " DMISAPIBEARER "\""), OK);
-
     // json data
     sprintf_P(postData,
       (prog_char*)F("{\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"uptime\":%ld,\"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam:\"%d}"),
