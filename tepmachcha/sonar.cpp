@@ -54,6 +54,7 @@ int16_t takeReading (void)
     digitalWrite (RANGE, HIGH);           //  sonar on
     wait (1000);
 
+    // read samples into array
 		for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
 		{
 				sample[sampleCount] = pulseIn (PING, HIGH);
@@ -64,8 +65,21 @@ int16_t takeReading (void)
 				wait (50);
 		}
 
+    // sort the samples
+		sort (sample, SAMPLES);
+
+		for (uint8_t sampleCount = 0; sampleCount < SAMPLES; sampleCount++)
+    {
+				Serial.print (F("sorted "));
+				Serial.print (sampleCount);
+				Serial.print (F(": "));
+				Serial.println (sample[sampleCount]);
+    }
+
+    // take the mode, or median
 		int16_t sampleMode = mode (sample, SAMPLES);
 
+    // offset by programmed stream-bed height
 		int16_t streamHeight = (SENSOR_HEIGHT - (sampleMode / 10)); //  1 µs pulse = 1mm distance
 
 		Serial.print (F("Surface distance from sensor is "));

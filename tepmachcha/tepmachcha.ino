@@ -116,7 +116,7 @@ void loop (void)
 		Serial.println (now.minute());
 
     // The RTC drifts more than the datasheet says, so we
-    // reset the time every day at midnight, by rebooting
+    // reset the time every day at midnight, by soft reboot
     if (!freshboot && now.hour() == 1 && now.minute() == 0)
     {
       Serial.println(F("reboot"));
@@ -156,6 +156,13 @@ void upload()
 
   if (fonaOn())
   {
+
+    /*
+    if (now.hour() == 0 && now.minute() == 0)
+    {
+       clockSet()
+    }
+    */
 
     /*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
      *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars

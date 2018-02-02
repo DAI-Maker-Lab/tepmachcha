@@ -35,7 +35,7 @@ void clockSet (void)
 				netYear = secondInt;
 		}
 
-		if (netYear < 2017 || netYear > 2050 || netHour > 23)   // If that still didn't work...
+		if (netYear < 2017 || netYear > 2050)  // If that still didn't work...
 		{
 				// get time from the NTP pool instead: 
 				// (https://en.wikipedia.org/wiki/Network_Time_Protocol)
@@ -59,13 +59,13 @@ void clockSet (void)
     static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
 
     if (netYear > 2000) { netYear -= 2000; }  // Adjust from YYYY to YY
-		if (netYear >= 17 && netYear < 50)        // Date looks valid
+		if (netYear > 17 && netYear < 50 && netHour < 24)  // Date looks valid
 		{
 				// Adjust UTC to local time
-        int8_t localtime = (netHour + UTCOFFSET);
-				if ( localtime < 0)                   // TZ takes us back a day
+        int8_t localhour = (netHour + UTCOFFSET);
+				if ( localhour < 0)                   // TZ takes us back a day
 				{
-				    netHour = localtime + 24;         // hour % 24
+				    netHour = localhour + 24;         // hour % 24
             if (--netDay == 0)                // adjust the date to UTC - 1
             {
               if (--netMonth == 0)
@@ -76,9 +76,9 @@ void clockSet (void)
               netDay = daysInMonth[netMonth-1];
             }
 				}
-				else if (localtime > 23)              // TZ takes us to the next day
+				else if (localhour > 23)              // TZ takes us to the next day
         {
-            netHour = localtime - 24;         // hour % 24
+            netHour = localhour - 24;         // hour % 24
             if (++netDay > daysInMonth[netMonth-1]) // adjust the date to UTC + 1
             {
               if (++netMonth > 12)
@@ -91,7 +91,7 @@ void clockSet (void)
         }
         else                                  // TZ is same day
         {
-            netHour = localtime;              // simply add TZ offset
+            netHour = localhour;              // simply add TZ offset
         }
 
 
