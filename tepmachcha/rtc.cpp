@@ -4,6 +4,13 @@ DateTime now;
 DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 
 
+uint8_t daysInMonth(uint8_t month)  // month 1..12
+{
+  static uint8_t const daysInMonthP [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
+  return pgm_read_byte(daysInMonth + month - 1);
+}
+
+
 void clockSet (void)
 {
 		char theDate[17];
@@ -53,10 +60,8 @@ void clockSet (void)
 				netHour = fona.parseInt();    // We asked NTP for UTC and will adjust below
 				netMinute = fona.parseInt();
 				netSecond = fona.parseInt();  // Our seconds may lag slightly
-		
 		}
 
-    static uint8_t const daysInMonth [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
 
     if (netYear > 2000) { netYear -= 2000; }  // Adjust from YYYY to YY
 		if (netYear > 17 && netYear < 50 && netHour < 24)  // Date looks valid
@@ -73,13 +78,13 @@ void clockSet (void)
                 netMonth = 12;
                 netYear--;
               }
-              netDay = daysInMonth[netMonth-1];
+              netDay = daysInMonth(netMonth);
             }
 				}
 				else if (localhour > 23)              // TZ takes us to the next day
         {
             netHour = localhour - 24;         // hour % 24
-            if (++netDay > daysInMonth[netMonth-1]) // adjust the date to UTC + 1
+            if (++netDay > daysInMonth(netMonth)) // adjust the date to UTC + 1
             {
               if (++netMonth > 12)
               {

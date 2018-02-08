@@ -17,9 +17,6 @@ void setup (void)
 
 		Serial.println (F(DEVICE));
 
-		analogReference(DEFAULT); // stalkerv3: DEFAULT=3.3V, INTERNAL=1.1V, EXTERNAL=3.3V
-    analogRead(BATT);         // must read once after changing reference
-
 		Serial.print (F("Battery: "));
 		Serial.print (batteryRead());
 		Serial.println (F("mV"));
@@ -120,8 +117,8 @@ void loop (void)
     if (!freshboot && now.hour() == 1 && now.minute() == 0)
     {
       Serial.println(F("reboot"));
-      WDTCSR = _BV(WDE);
-      while (1); // 16 ms
+      WDTCSR = _BV(WDE);  // enable watchdog timer
+      while (1);          // wait until reset - should be 16 ms
     } else {
       freshboot = false;
     }
@@ -339,11 +336,15 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 
     // HTTP POST headers
     fona.sendCheckReply (F("AT+HTTPINIT"), OK);
+
+    // TODO test SSL
     //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
+    //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
 
-    //TODO don't need http:// in url, in fact it breaks when using https://
-    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
+    // TODO don't need http:// in url, in fact it breaks when using https://
+    //fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
 
+    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
     fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);

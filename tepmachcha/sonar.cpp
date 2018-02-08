@@ -2,16 +2,18 @@
 
 #include "tepmachcha.h"
 
-// insertion sort
+// insertion sort: https://en.wikipedia.org/wiki/Insertion_sort
 void sort(int16_t *a, uint8_t n)
 {
   for (uint8_t i = 1; i < n; i++)
   {
+    // 'float' the current element towards the beginning of array
     for (uint8_t j = i; j > 0 && a[j] < a[j-1]; j--)
     {
-      int16_t tmp = a[j-1];
-      a[j-1] = a[j];
-      a[j] = tmp;
+      // swap (j, j-1)
+      int16_t tmp = a[j];
+      a[j] = a[j-1];
+      a[j-1] = tmp;
     }
   }
 }
@@ -41,7 +43,6 @@ int16_t mode (int16_t *sample, uint8_t n)
         mode = sample[(n/2)];  // use median if no sequence > 1 or bimodal
       }
     }
-
     return mode;
 }
 
