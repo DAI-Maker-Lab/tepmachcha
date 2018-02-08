@@ -4,9 +4,10 @@ DateTime now;
 DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 
 
-uint8_t daysInMonth(uint8_t month) {
+uint8_t daysInMonth(uint8_t month)  // month 1..12
+{
   static uint8_t const daysInMonthP [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
-  return pgm_read_byte(daysInMonth + month);
+  return pgm_read_byte(daysInMonth + month - 1);
 }
 
 
@@ -77,13 +78,13 @@ void clockSet (void)
                 netMonth = 12;
                 netYear--;
               }
-              netDay = daysInMonth(netMonth - 1);
+              netDay = daysInMonth(netMonth);
             }
 				}
 				else if (localhour > 23)              // TZ takes us to the next day
         {
             netHour = localhour - 24;         // hour % 24
-            if (++netDay > daysInMonth(netMonth-1)) // adjust the date to UTC + 1
+            if (++netDay > daysInMonth(netMonth)) // adjust the date to UTC + 1
             {
               if (++netMonth > 12)
               {

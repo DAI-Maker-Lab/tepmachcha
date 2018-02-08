@@ -117,8 +117,8 @@ void loop (void)
     if (!freshboot && now.hour() == 1 && now.minute() == 0)
     {
       Serial.println(F("reboot"));
-      WDTCSR = _BV(WDE);
-      while (1); // 16 ms
+      WDTCSR = _BV(WDE);  // enable watchdog timer
+      while (1);          // wait until reset - should be 16 ms
     } else {
       freshboot = false;
     }
@@ -338,6 +338,7 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 
     // TODO test SSL
     //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
+    //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
 
     // TODO don't need http:// in url, in fact it breaks when using https://
     //fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
