@@ -22,7 +22,7 @@ void wait (uint32_t period)
 //
 // We use integer math to avoid including ~1.2K of FP library
 // AREF ADC->mV factor   approx integer fraction
-// ==== ==============   =======================
+// ---  --------------   -----------------------
 // 1.1      6.45          1651/256 (~103/16)
 // 3.3     19.35          4955/256 (~155/8)
 //
@@ -38,6 +38,9 @@ void wait (uint32_t period)
 uint16_t batteryRead(void)
 {
   uint32_t mV = 0;
+
+  analogReference(DEFAULT); // stalkerv3: DEFAULT=3.3V, INTERNAL=1.1V, EXTERNAL=3.3V
+  analogRead(BATT);         // must read once after changing reference
 
   for (uint8_t i = 0; i < 155; i++)
   {
@@ -82,4 +85,3 @@ boolean solarCharging(void)
     }
     return false;
 }
-
