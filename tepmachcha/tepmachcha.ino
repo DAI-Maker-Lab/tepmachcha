@@ -10,6 +10,8 @@ static void rtcIRQ (void)
 
 void setup (void)
 {
+		pinMode (WATCHDOG, INPUT_PULLUP);
+
 		Wire.begin();         // Begin I2C interface
 		RTC.begin();          // Begin RTC
 		Serial.begin (57600); // Begin debug serial
@@ -22,9 +24,6 @@ void setup (void)
 		Serial.println (F("mV"));
 
     // Set output pins (default is input)
-		pinMode (WATCHDOG, INPUT_PULLUP);
-		//pinMode (WATCHDOG, INPUT);
-
 		pinMode (BEEPIN, OUTPUT);
 		pinMode (RANGE, OUTPUT);
 		pinMode (FONA_KEY, OUTPUT);
@@ -41,6 +40,10 @@ void setup (void)
 #ifdef BUS_PWR
     digitalWrite (BUS_PWR, HIGH);        // Peripheral bus on
 #endif
+
+    // set RTC interrupt handler and enable interrupts
+		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
+		interrupts();
 
 		/*  If the voltage at startup is less than 3.5V, we assume the battery died in the field
 		 *  and the unit is attempting to restart after the panel charged the battery enough to
@@ -65,14 +68,10 @@ void setup (void)
 				sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 		}
 
-    // Set RTC interrupt handler
-		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
-		interrupts();
 
 		// We will use the FONA to get the current time to set the Stalker's RTC
 		if (fonaOn())
     {
-
       // set ext. audio, to prevent crash on incoming calls
       // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
       fona.sendCheckReply(F("AT+CHFA=1"), OK);
@@ -145,7 +144,6 @@ void loop (void)
 
 void upload()
 {
-
   int16_t streamHeight;
   uint8_t status;
   boolean charging;

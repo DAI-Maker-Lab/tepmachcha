@@ -4,9 +4,9 @@ DateTime now;
 DS1337 RTC;         //  Create the DS1337 real-time clock (RTC) object
 
 
+static uint8_t const daysInMonthP [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
 uint8_t daysInMonth(uint8_t month)  // month 1..12
 {
-  static uint8_t const daysInMonthP [] PROGMEM = { 31,28,31,30,31,30,31,31,30,31,30,31 };
   return pgm_read_byte(daysInMonth + month - 1);
 }
 

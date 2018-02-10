@@ -7,10 +7,10 @@ void testSMS() {
 static int freeRam (void) {
   extern int __heap_start;
   extern int *__brkval; 
-  extern int  __bss_end;
+  //extern int  __bss_end;
   int v; 
-  //return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
-  return (int) &v - (__brkval == 0 ? (int) &__bss_end : (int) __brkval); 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+  //return (int) &v - (__brkval == 0 ? (int) &__bss_end : (int) __brkval); 
 }
 
 /*

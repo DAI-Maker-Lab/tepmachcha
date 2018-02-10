@@ -115,7 +115,5 @@ int16_t internalTemp(void)
   }
 
   // offset ~324.31, scale by 1/1.22 to give C
-  //wADC = wADC / 64;
-  //t = (wADC - 324.31 ) / 1.22;
   return (wADC - (324*64) ) / 78;    // 64/78 ~= 1/1.22
 }

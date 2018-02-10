@@ -86,6 +86,8 @@ boolean fonaGSMOn(void) {
     if (status == 1 || status == 5)
     {
       Serial.println(F("done."));
+      fona.sendCheckReply (F("AT+COPS?"), OK);  // Network operator
+      fonaFlush();
       return true;
     }
   }
