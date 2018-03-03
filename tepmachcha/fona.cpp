@@ -106,7 +106,7 @@ boolean fonaGPRSOn(void) {
 
   if (rssi > 5)
   {
-    for (uint8_t attempt = 1; attempt < 5; attempt++)
+    for (uint8_t attempt = 1; attempt < 7; attempt++)
     {
       Serial.print (F("Turning GPRS on, attempt ")); Serial.println(attempt);
       fona.enableGPRS (true);

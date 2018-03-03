@@ -112,7 +112,8 @@ void loop (void)
 		Serial.println (now.minute());
 
     // The RTC drifts more than the datasheet says, so we
-    // reset the time every day at midnight, by soft reboot
+    // reset the time every day at 1AM, by soft reboot
+    /*
     if (!freshboot && now.hour() == 1 && now.minute() == 0)
     {
       Serial.println(F("reboot"));
@@ -121,6 +122,7 @@ void loop (void)
     } else {
       freshboot = false;
     }
+    */
 
     XBee();
 
@@ -152,12 +154,12 @@ void upload()
   if (fonaOn())
   {
 
-    /*
+    // The RTC drifts more than the datasheet says, so we
+    // reset the time every day at midnight
     if (now.hour() == 0 && now.minute() == 0)
     {
-       clockSet()
+       clockSet();
     }
-    */
 
     /*  One failure mode of the sonar -- if, for example, it is not getting enough power -- 
      *	is to return the minimum distance the sonar can detect; in the case of the 10m sonars
@@ -207,8 +209,6 @@ boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
     sprintf_P (post_data,
         // uptime, freeRam, analogCharge, version, internalTemp, RSSI, statusCode
         (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"version\":\"" VERSION "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
-
-        //(prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
           streamHeight,
           solar,
           voltage,
@@ -252,78 +252,6 @@ boolean ews1294Post (int16_t streamHeight, boolean solar, uint16_t voltage)
     }
 }
 
-/*
-boolean ews1294Post2 (int16_t streamHeight, boolean solar, uint16_t voltage)
-{
-    uint16_t statusCode;
-    uint16_t dataLen;
-    char postData[128]; // was 200
-    DEBUG_RAM
-
-    // HTTP POST headers
-    fona.sendCheckReply (F("AT+HTTPINIT"), OK);
-    //fona.sendCheckReply (F("AT+HTTPSSL=1"), OK);   // SSL required
-    fona.sendCheckReply (F("AT+HTTPPARA=\"URL\",\"http://dmis-staging.eu-west-1.elasticbeanstalk.com/api/v1/data/river-gauge\""), OK);
-
-    fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), OK);
-    fona.sendCheckReply (F("AT+HTTPPARA=\"UA\",\"Tepmachcha/" VERSION "\""), OK);
-    fona.sendCheckReply (F("AT+HTTPPARA=\"CONTENT\",\"application/json\""), OK);
-
-        sprintf_P (post_data,
-            (prog_char *)F("api_token=" EWSTOKEN_ID "&data={\"sensorId\":\"" EWSDEVICE_ID "\",\"streamHeight\":\"%d\",\"charging\":\"%d\",\"voltage\":\"%d\",\"timestamp\":\"%d-%d-%dT%d:%d:%d.000Z\"}\r\n"),
-              streamHeight,
-              solar,
-              voltage,
-              now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second()
-        );
-        if (fona.HTTP_POST_start ("ews1294.info/api/v1/sensorapi", F("application/x-www-form-urlencoded"), post_data, strlen(post_data), &status_code, &response_length)) {
-
-
-    // Note the data_source should match the last element of the url,
-    // which must be a valid data_source
-    // To add multiple user headers:
-    //   http://forum.sodaq.com/t/how-to-make-https-get-and-post/31/18
-    fona.sendCheckReply (F("AT+HTTPPARA=\"USERDATA\",\"data_source: river-gauge\\r\\nAuthorization: Bearer " DMISAPIBEARER "\""), OK);
-
-    // json data
-    sprintf_P(postData,
-      (prog_char*)F("{\"sensorId\":\"" DMISSENSOR_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000Z\"}"),
-        streamHeight,
-        solar,
-        voltage,
-        now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second());
-    int s = strlen(postData);
-
-    // tell fona to receive data, and how much
-    Serial.print (F("data size:")); Serial.println (s);
-    fona.print (F("AT+HTTPDATA=")); fona.print (s);
-    fona.println (F(",2000")); // timeout
-    fona.expectReply (OK);
-
-    // send data
-    Serial.print(postData);
-    fona.print(postData);
-    delay(100);
-
-    // do the POST request
-    fona.HTTP_action (1, &statusCode, &dataLen, 10000);
-
-    // report status, response data
-    Serial.print (F("http code: ")); Serial.println (statusCode);
-    Serial.print (F("reply len: ")); Serial.println (dataLen);
-    if (dataLen > 0)
-    {
-      fona.sendCheckReply (F("AT+HTTPREAD"), OK);
-      delay(1000);
-    }
-
-    fonaFlush();
-    fona.HTTP_POST_end();
-
-    return (statusCode == 201);
-}
-*/
-
 
 boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 {
@@ -355,7 +283,7 @@ boolean dmisPost (int16_t streamHeight, boolean solar, uint16_t voltage)
 
     // json data
     sprintf_P(postData,
-      (prog_char*)F("{\"sensorId\":\"" DMISSENSOR_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000Z\"}"),
+      (prog_char*)F("{\"sensorId\":\"" DMISSENSOR_ID "\",\"streamHeight\":%d,\"charging\":%d,\"voltage\":%d,\"timestamp\":\"%d-%02d-%02dT%02d:%02d:%02d.000ICT\"}"),
         streamHeight,
         solar,
         voltage,

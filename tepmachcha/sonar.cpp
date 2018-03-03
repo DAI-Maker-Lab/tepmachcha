@@ -3,12 +3,12 @@
 #include "tepmachcha.h"
 
 // insertion sort: https://en.wikipedia.org/wiki/Insertion_sort
-void sort(int16_t *a, uint8_t n)
+void sort (int16_t *a, uint8_t n)
 {
   for (uint8_t i = 1; i < n; i++)
   {
-    // 'float' the current element towards the beginning of array
-    for (uint8_t j = i; j > 0 && a[j] < a[j-1]; j--)
+    // 'float' the current element up towards the beginning of array
+    for (uint8_t j = i; j >= 1 && a[j] < a[j-1]; j--)
     {
       // swap (j, j-1)
       int16_t tmp = a[j];
@@ -35,12 +35,12 @@ int16_t mode (int16_t *sample, uint8_t n)
 
       if (count > max_count)  // current sequence is the longest
       {
-          max_count = count;
-          mode = sample[i];
+        max_count = count;
+        mode = sample[i];
       }
-      else if (count == max_count)
+      else if (count == max_count)  // no sequence (count == 1), or bimodal
       {
-        mode = sample[(n/2)];  // use median if no sequence > 1 or bimodal
+        mode = sample[(n/2)];       // use median
       }
     }
     return mode;

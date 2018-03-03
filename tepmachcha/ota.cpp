@@ -224,6 +224,7 @@ boolean fonaFileCopy(uint16_t len)
       continue;
     }
 
+    // success, reset attempts counter, move to next block
     retry_attempts = BLOCK_ATTEMPTS;
     address += size;
     if (address + size > len)  // CHECKME should by >= ??
